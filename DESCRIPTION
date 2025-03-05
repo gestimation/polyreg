@@ -1,11 +1,10 @@
 Package: polyreg
-Title: What the Package Does (One Line, Title Case)
+Title: Direct polytomous regression for estimating multiplicative effects on cumulative incidence probabilities from competing risks data
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("S", "T", , "gestimation@gmail.com", role = c("aut", "cre"))
+Description: Direct polytomous regression is a competing risks model that can jointly analyze multiple competing events and estimates estimate multiplicative effects of a binary exposure. This model naturally enforces a sum restriction to cumulative incidence probabilities by reparameterizing nuisance parameters using polytomous log odds products. Risk ratios, odds ratios or sub-distribution hazard ratios for each of competing events are estimated by stratified inverse probability of censoring weighted estimators under adjustment for covariates in the nuisance and censoring models. 
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
