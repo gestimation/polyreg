@@ -68,40 +68,25 @@ summary.full.
 
 ## Example
 
-The code below is an example of direct polynomial regression analysis.
-Regression coefficients and variance covariance matrix and both exposure
-(platelet) and covariates (age and tcell) in regression models for
-cumulative incidence probabilities of event 1 and 2 at 24 years are
-presented. Dataset bmt is a well-known competing risks dataset that is
-included in package mets.
+The code below conducts unadjusted analysis focusing on cumulative
+incidence probabilities of event 1 and 2 at 24 years. Regression
+coefficients and variance covariance matrix of both exposure (fruitq1)
+and covariates (intercept in this case) in the models are presented.
 
 ``` r
 library(polyreg)
-data(bmt)
-output <- polyreg(nuisance.model = Event(time, cause)~age+tcell, exposure = 'platelet', cens.model = Event(time,cause==0)~+1, data = bmt, 
-effect.measure1='RR', effect.measure2='RR', time.point=24, outcome.type='COMPETINGRISK')
+data(diabetes.complications)
+output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1',
+          cens.model = Event(t,epsilon==0) ~ 1, data = diabetes.complications,
+          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
 print(output$coefficient)
-#> [1] -0.4472068  1.0052315 -1.3167257 -0.4822598 -1.6759005  0.4145390  0.6308143
-#> [8]  0.1200117
+#> [1] -1.38313105  0.30043925 -3.99147261  0.07582589
 print(output$cov)
-#>               [,1]          [,2]         [,3]          [,4]          [,5]
-#> [1,]  0.0200745145  0.0053338619 -0.016367885 -0.0115355705 -0.0006470073
-#> [2,]  0.0053338619  0.0179075875 -0.007469460  0.0007063736 -0.0050881169
-#> [3,] -0.0163678853 -0.0074694604  0.120004125 -0.0015748967 -0.0057383515
-#> [4,] -0.0115355705  0.0007063736 -0.001574897  0.0304237153 -0.0011071326
-#> [5,] -0.0006470073 -0.0050881169 -0.005738352 -0.0011071326  0.0066535606
-#> [6,]  0.0455363765  0.0513083209 -0.034391995 -0.0092520156 -0.0314900328
-#> [7,] -0.0227574688 -0.0147496152  0.037940472  0.0034018555  0.0107875255
-#> [8,]  0.0093699814  0.0137060404  0.006532487 -0.0014248493 -0.0166096829
-#>              [,6]         [,7]         [,8]
-#> [1,]  0.045536376 -0.022757469  0.009369981
-#> [2,]  0.051308321 -0.014749615  0.013706040
-#> [3,] -0.034391995  0.037940472  0.006532487
-#> [4,] -0.009252016  0.003401855 -0.001424849
-#> [5,] -0.031490033  0.010787525 -0.016609683
-#> [6,]  0.330148842 -0.162984297  0.100965525
-#> [7,] -0.162984297  0.162951942 -0.062476954
-#> [8,]  0.100965525 -0.062476954  0.052380913
+#>              [,1]          [,2]          [,3]          [,4]
+#> [1,]  0.007240584 -4.543030e-03 -1.051296e-03  0.0050890586
+#> [2,] -0.004543030  9.669548e-03 -1.309544e-05 -0.0005223235
+#> [3,] -0.001051296 -1.309544e-05  2.436955e-02 -0.0838268451
+#> [4,]  0.005089059 -5.223235e-04 -8.382685e-02  0.2889784118
 ```
 
 The summaries of analysis results in the list of outputs
@@ -118,7 +103,7 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 
 <table style="width:99%;">
 <colgroup>
-<col style="width: 27%" />
+<col style="width: 28%" />
 <col style="width: 35%" />
 <col style="width: 35%" />
 </colgroup>
@@ -132,58 +117,38 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 <tbody>
 <tr class="odd">
 <td>Intercept</td>
-<td>0.639</td>
-<td>0.187</td>
+<td>0.251</td>
+<td>0.018</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[0.484, 0.844]</td>
-<td>[0.159, 0.220]</td>
+<td>[0.212, 0.296]</td>
+<td>[0.014, 0.025]</td>
 </tr>
 <tr class="odd">
-<td>age</td>
-<td>2.733</td>
-<td>1.514</td>
+<td>fruitq1</td>
+<td>1.350</td>
+<td>1.079</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[2.102, 3.552]</td>
-<td>[0.491, 4.668]</td>
-</tr>
-<tr class="odd">
-<td>tcell</td>
-<td>0.268</td>
-<td>1.879</td>
-</tr>
-<tr class="even">
-<td></td>
-<td>[0.136, 0.528]</td>
-<td>[0.852, 4.145]</td>
-</tr>
-<tr class="odd">
-<td>platelet</td>
-<td>0.617</td>
-<td>1.128</td>
-</tr>
-<tr class="even">
-<td></td>
-<td>[0.439, 0.869]</td>
-<td>[0.720, 1.766]</td>
+<td>[1.114, 1.637]</td>
+<td>[0.376, 3.094]</td>
 </tr>
 <tr class="odd">
 <td>effect.measure</td>
-<td>RR of platelet at 24 ( ref = 0 )</td>
-<td>RR of platelet at 24 ( ref = 0 )</td>
+<td>RR of fruitq1 at 8 ( ref = 0 )</td>
+<td>RR of fruitq1 at 8 ( ref = 0 )</td>
 </tr>
 <tr class="even">
 <td>n.events</td>
-<td>153 events in 408 observations</td>
-<td>76 events in 408 observations</td>
+<td>279 events in 978 observations</td>
+<td>79 events in 978 observations</td>
 </tr>
 <tr class="odd">
 <td>median.follow.up</td>
-<td>7.862 [ 0.03 , 110.625 ]</td>
-<td>7.862 [ 0.03 , 110.625 ]</td>
+<td>7.9973 [ 0.0493 , 11.0034 ]</td>
+<td>7.9973 [ 0.0493 , 11.0034 ]</td>
 </tr>
 <tr class="even">
 <td>n.loop.iteration</td>
@@ -201,7 +166,7 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="even">
 <td>max.function.value</td>
-<td>8.63044214525472e-10</td>
+<td>1.50821400358489e-11</td>
 <td><ul>
 <li></li>
 </ul></td>
@@ -216,24 +181,20 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tbody>
 </table>
 
-Another example dataset is diabetes.complications. Direct polynomial
-regression is applied to this dataset to estimate risk ratios of the
-first quartile of fruit intake (fruitq1=1 indicates the first quartile,
-fruitq1=0 indicates the third to fourth quartile) on diabetes
-complications (diabetic retinopathy coded by epsilon=1 and macrovascular
-complications coded by epsilon=2). The code below is survival analysis
-(outcome.type=‘SURVIVAL’) to estimate the effects on the risk of
-diabetic retinopathy at 8 years of follow-up, treating macrovascular
-complications as censored.
+The second example is survival analysis (outcome.type=‘SURVIVAL’) to
+estimate the effects on the risk of diabetic retinopathy at 8 years of
+follow-up, treating macrovascular complications as censoring. 15
+covariates and censoring strata are specified in nuisance.model and
+cens.model, respectively.
 
 ``` r
 data(diabetes.complications)
 diabetes.complications$d <- (diabetes.complications$epsilon>0)
-model <- "Event(t,d) ~ age+sex+bmi+hba1c+diabetes_duration+drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa"
-model <- as.formula(model)
-output <- polyreg(nuisance.model = model, exposure = 'fruitq1',
-                  cens.model = Event(t,d==0)~strata(strata), data = diabetes.complications,
-                  effect.measure1='RR', time.point=8, outcome.type='SURVIVAL')
+output <- polyreg(nuisance.model = Event(t,d) ~ age+sex+bmi+hba1c
+          +diabetes_duration+drug_oha+drug_insulin+sbp+ldl+hdl+tg
+          +current_smoker+alcohol_drinker+ltpa, exposure = 'fruitq1',
+          cens.model = Event(t,d==0)~strata(strata), data = diabetes.complications,
+          effect.measure1='RR', time.point=8, outcome.type='SURVIVAL')
 ```
 
 Only the regression coefficient of exposure is included in summary, so
@@ -265,11 +226,12 @@ data.initial.values <- c(-20.01, 1.591, -0.2065, 1.962, 10.05, 4.004, 0.9624, 1.
                          1.072, 1.304, -0.6444, -1.600, -0.01816, 0.4460, -29.25, 6.586, -1.090, 3.515,
                          4.048, -5.012, 0.05348, 0.1609, 6.432, -0.4783, -3.230, -4.135, 1.451, 0.04964,
                          3.822, -0.08824)
-model <- "Event(t,epsilon) ~ age+sex+bmi+hba1c+diabetes_duration+drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa"
-model <- as.formula(model)
-output <- polyreg(nuisance.model = model, exposure = 'fruitq1',
-                  cens.model = Event(t,epsilon==0)~strata(strata), data = diabetes.complications,
-                  effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='COMPETINGRISK', data.initial.values=data.initial.values)
+output <- polyreg(nuisance.model = Event(t,epsilon) ~ age+sex+bmi+hba1c
+          +diabetes_duration+drug_oha+drug_insulin+sbp+ldl+hdl+tg
+          +current_smoker+alcohol_drinker+ltpa, exposure = 'fruitq1',
+          cens.model=Event(t,epsilon==0)~strata(strata),data=diabetes.complications,
+          effect.measure1='RR', time.point=8, outcome.type='COMPETINGRISK',
+          data.initial.values=data.initial.values)
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
@@ -289,13 +251,13 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 <tbody>
 <tr class="odd">
 <td>fruitq1 ( ref = 0 )</td>
-<td>1.558</td>
+<td>1.557</td>
 <td>0.913</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[1.311, 1.851]</td>
-<td>[0.461, 1.806]</td>
+<td>[1.311, 1.850]</td>
+<td>[0.461, 1.805]</td>
 </tr>
 <tr class="odd">
 <td>effect.measure</td>

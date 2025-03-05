@@ -147,10 +147,10 @@ polyreg <- function(
     ip.weight.matrix <- matrix(NA, nrow=out_normalizeCovariate$n, ncol=length(time.point))
     for (specific.time in time.point) {
       i_time <- i_time + 1
-      ip.weight.matrix[,i_time] <- calculateIPW(formula = cens.model, data = sorted_data, specific.time = specific.time)
+      ip.weight.matrix[,i_time] <- calculateIPCW(formula = cens.model, data = sorted_data, specific.time = specific.time)
     }
   } else {
-    ip.weight <- calculateIPW(formula = cens.model, data = sorted_data, specific.time = estimand$time.point)
+    ip.weight <- calculateIPCW(formula = cens.model, data = sorted_data, specific.time = estimand$time.point)
   }
 
   #######################################################################################################
