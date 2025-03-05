@@ -1,0 +1,9 @@
+test_that("polyreg produced expected coefficients and variance covariance matrix from bmt dataset", {
+  data(bmt)
+  result <- polyreg(nuisance.model = Event(time, cause)~age+tcell, exposure = 'platelet', cens.model = Event(time,cause==0)~+1, data = bmt, effect.measure1='RR', effect.measure2='RR', time.point=24, outcome.type='COMPETINGRISK')
+  tested_coefficient <- round(result$coefficient,digit=2)
+  tested_cov <- round(result$cov[1,],digit=2)
+  tested <- as.vector(cbind(tested_coefficient,tested_cov))
+  expected <- c(-0.45, 1.01, -1.32, -0.48, -1.68, 0.41, 0.63, 0.12, 0.02, 0.01, -0.02, -0.01, -0.00, 0.05, -0.02, 0.01)
+  expect_equal(expected, tested)
+})

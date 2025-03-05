@@ -1,3 +1,37 @@
+#' @title Direct polynomial regression for survival and competing risks analysis
+#'
+#' @param nuisance.model formula Model formula representing outcome, exposure and covariates
+#' @param exposure character Column name representing the exposure (1 = exposed, 0 = not exposed).
+#' @param cens.model formula Model formula representing censoring and covariates.
+#' @param data data.frame Input dataset containing survival data.
+#' @param effect.measure1 character Specifies the effect measure for event (RR, OR, SHR).
+#' @param effect.measure2 character Specifies the effect measure for competing risk (RR, OR, SHR).
+#' @param exposure.reference integer Specifies the code of the reference category of effects. Defaults to 1.
+#' @param time.point numeric The time point for exposure effects to be estimated.
+#' @param outcome.type character Specifies the type of outcome (COMPETINGRISK or SURVIVAL).
+#' @param conf.level numeric The level for confidence intervals.
+#' @param outer.optim.method character Specifies the method of optimization (nleqslv, optim, multiroot).
+#' @param inner.optim.method character Specifies the method of optimization (nleqslv, optim, multiroot).
+#' @param optim.parameter1 numeric Convergence threshold for outer loop. Defaults to 1e-5.
+#' @param optim.parameter2 integer Maximum number of iterations. Defaults to 20.
+#' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
+#' @param optim.parameter4 numeric Convergence threshold for optim in outer loop. Defaults to 1e-5.
+#' @param optim.parameter5 integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.
+#' @param optim.parameter6 numeric Convergence threshold for optim in inner loop. Defaults to 1e-10.
+#' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
+#' @param data.initlal.values data.frame Optional dataset containing initial values. Defaults to NULL.
+#' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
+#' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
+#' @param prob.bound numeric Small threshold for clamping probabilities. Defaults to 1e-5.
+#'
+#' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
+#' @export
+#'
+#' @examples
+#' #' data(bmt)
+#' result <- polyreg(nuisance.model = Event(time, cause)~age+tcell, exposure = 'platelet',
+#' cens.model = Event(time,cause==0)~+1, data = bmt, effect.measure1='RR', effect.measure2='RR', time.point=24, outcome.type='COMPETINGRISK')
+#' msummary(result$out_summary, statistic = c("conf.int"), exponentiate = TRUE)
 polyreg <- function(
     nuisance.model,
     exposure,
