@@ -8,3 +8,12 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Imports: mets, nleqslv
+VignetteBuilder: knitr
+URL: https://github.com/gestimation/polyreg
+BugReports: https://github.com/gestimation/polyreg/issues
