@@ -156,12 +156,9 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   }
 
   out_calculateD <- calculateD(potential.CIFs, x_a, x_l, estimand, prob.bound)
-  #hesse_d11 <- crossprod(x_la, w11 * out_calculateD$d_11) / n
-  #hesse_d12 <- crossprod(x_la, w12 * out_calculateD$d_12) / n
-  #hesse_d22 <- crossprod(x_la, w22 * out_calculateD$d_22) / n
   hesse_d11 <- t(x_la) %*% (w11 * out_calculateD$d_11) / n
-  hesse_d11 <- t(x_la) %*% (w12 * out_calculateD$d_11) / n
-  hesse_d11 <- t(x_la) %*% (w22 * out_calculateD$d_22) / n
+  hesse_d12 <- t(x_la) %*% (w12 * out_calculateD$d_12) / n
+  hesse_d22 <- t(x_la) %*% (w22 * out_calculateD$d_22) / n
 
   hesse_d1 <- cbind(hesse_d11, hesse_d12)
   hesse_d2 <- cbind(hesse_d12, hesse_d22)
@@ -170,9 +167,6 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   total_score <- cbind(AB1, AB2)
   influence.function <- total_score %*% t(solve(hesse))
   cov_estimated <- t(influence.function) %*% influence.function / n / n
-  #  cov_estimated <- crossprod(influence.function,influence.function) / n / n
-  #  cov_AB <- crossprod(total_score,total_score) / n
-  #  cov_estimated <- solve(hesse) %*% cov_AB %*% t(solve(hesse)) / n
 
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
@@ -341,12 +335,10 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
     }
   }
   out_calculateDSurvival <- calculateDSurvival(potential.CIFs, x_a, x_l, estimand, prob.bound)
-  hesse <- crossprod(x_la, w11 * out_calculateDSurvival) / n
   hesse <- t(x_la) %*% (w11 * out_calculateDSurvival) / n
   total_score <- AB1
   influence.function <- total_score %*% t(solve(hesse))
   cov_estimated <- t(influence.function) %*% influence.function / n / n
-  #cov_estimated <- crossprod(influence.function, influence.function) / n / n
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 

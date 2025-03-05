@@ -23,8 +23,9 @@
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
 #' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
 #' @param prob.bound numeric Small threshold for clamping probabilities. Defaults to 1e-5.
-#' @importFrom mets
-#' @importFrom nleqslv
+#' @importFrom mets phreg Event
+#' @importFrom survival Surv
+#' @importFrom nleqslv nleqslv
 #'
 #' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
 #' @export

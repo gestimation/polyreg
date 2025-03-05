@@ -1,4 +1,6 @@
 test_that("polyreg produced expected coefficients and variance covariance matrix from bmt dataset", {
+  library(mets)
+  library(nleqslv)
   data(bmt)
   result <- polyreg(nuisance.model = Event(time, cause)~age+tcell, exposure = 'platelet', cens.model = Event(time,cause==0)~+1, data = bmt, effect.measure1='RR', effect.measure2='RR', time.point=24, outcome.type='COMPETINGRISK')
   tested_coefficient <- round(result$coefficient,digit=2)

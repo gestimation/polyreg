@@ -1,6 +1,6 @@
 Package: polyreg
 Title: Direct polytomous regression for estimating multiplicative effects on cumulative incidence probabilities from competing risks data
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: 
     person("S", "T", , "gestimation@gmail.com", role = c("aut", "cre"))
 Description: Direct polytomous regression is a competing risks model that can jointly analyze multiple competing events and estimates estimate multiplicative effects of a binary exposure. This model naturally enforces a sum restriction to cumulative incidence probabilities by reparameterizing nuisance parameters using polytomous log odds products. Risk ratios, odds ratios or sub-distribution hazard ratios for each of competing events are estimated by stratified inverse probability of censoring weighted estimators under adjustment for covariates in the nuisance and censoring models. 
