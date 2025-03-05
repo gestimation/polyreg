@@ -387,6 +387,12 @@ sortByCovariate <- function(formula, data, should.sort.data, n_covariate) {
 }
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
+  if (requireNamespace("mets", quietly = TRUE) & requireNamespace("nleqslv", quietly = TRUE)) {
+    suppressWarnings(library(mets))
+    suppressWarnings(library(nleqslv))
+  } else {
+    stop("Required packages 'mets' and/or 'nleqslv' are not installed.")
+  }
   if (outcome.type %in% c("COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing risk", "Competingrisks", "Competing risks", "competingrisk", "competing risk", "competingrisks", "competing risks")) {
     outcome.type.corrected <<- "COMPETINGRISK"
   } else if (outcome.type %in% c("SURVIVAL", "S", "Survival", "Survival")) {

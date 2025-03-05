@@ -1,6 +1,4 @@
 test_that("polyreg produced expected coefficients and variance covariance matrix from competing risks data in diabetes.complications", {
-  library(mets)
-  library(nleqslv)
   data(diabetes.complications)
   output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', cens.model = Event(t,epsilon==0)~+1, data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
   tested_coefficient <- round(output$coefficient,digit=3)
@@ -11,8 +9,6 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
 })
 
 test_that("polyreg produced expected coefficients and variance covariance matrix from survival data in diabetes.complications", {
-  library(mets)
-  library(nleqslv)
   data(diabetes.complications)
   diabetes.complications$d <- as.numeric(diabetes.complications$epsilon>0)
   output <- polyreg(nuisance.model = Event(t,d)~+1, exposure = 'fruitq1', cens.model = Event(t,d==0)~+1, data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='S')
@@ -22,9 +18,6 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expected <- c(-0.901, 0.252, 0.003, -0.003)
   expect_equal(expected, tested)
 })
-
-
-
 
 #test_that("polyreg produced expected coefficients and variance covariance matrix from bmt dataset", {
 #  library(mets)
