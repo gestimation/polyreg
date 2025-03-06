@@ -1,12 +1,15 @@
 #' @title Direct polynomial regression for survival and competing risks analysis
 #'
 #' @param nuisance.model formula Model formula representing outcome, exposure and covariates
-#' @param exposure character Column name representing the exposure (1 = exposed, 0 = not exposed).
-#' @param cens.model formula Model formula representing censoring and covariates.
+#' @param exposure character Column name representing the exposure. The exposure variable should be coded with 0 and 1 (e.g. 1 = exposed, 0 = not exposed).
+#' @param strata character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL
 #' @param data data.frame Input dataset containing survival data.
+#' @param code.event1 integer Specifies the code of event 1. Defaults to 1.
+#' @param code.event2 integer Specifies the code of event 2. Defaults to 2.
+#' @param code.censoring integer Specifies the code of censoring. Defaults to 0.
+#' @param code.exposure.ref integer Specifies the code of the reference category of exposure. Defaults to 0.
 #' @param effect.measure1 character Specifies the effect measure for event (RR, OR, SHR).
 #' @param effect.measure2 character Specifies the effect measure for competing risk (RR, OR, SHR).
-#' @param exposure.reference integer Specifies the code of the reference category of effects. Defaults to 1.
 #' @param time.point numeric The time point for exposure effects to be estimated.
 #' @param outcome.type character Specifies the type of outcome (COMPETINGRISK or SURVIVAL).
 #' @param conf.level numeric The level for confidence intervals.
@@ -31,18 +34,20 @@
 #' @export
 #'
 #' @examples
-#' #' data(bmt)
-#' result <- polyreg(nuisance.model = Event(time, cause)~age+tcell, exposure = 'platelet',
-#' cens.model = Event(time,cause==0)~+1, data = bmt, effect.measure1='RR', effect.measure2='RR', time.point=24, outcome.type='COMPETINGRISK')
-#' msummary(result$out_summary, statistic = c("conf.int"), exponentiate = TRUE)
+#' data(diabetes.complications)
+#' output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+#' msummary(output$out_summary, statistic = c("conf.int"), exponentiate = TRUE)
 polyreg <- function(
     nuisance.model,
     exposure,
-    cens.model,
+    strata = NULL,
     data,
+    code.event1 = 1,
+    code.event2 = 2,
+    code.censoring = 0,
+    code.exposure.ref = 0,
     effect.measure1 = 'RR',
     effect.measure2 = 'RR',
-    exposure.reference = 0,
     time.point,
     outcome.type = 'COMPETINGRISK',
     conf.level = 0.95,
@@ -71,7 +76,15 @@ polyreg <- function(
   effect.measure2 <- effect.measure2.corrected
   time.point <- time.point.corrected
 
-  estimand <- list(effect.measure1=effect.measure1, effect.measure2=effect.measure2, time.point=time.point, exposure.reference=exposure.reference)
+  estimand <- list(
+    effect.measure1=effect.measure1,
+    effect.measure2=effect.measure2,
+    time.point=time.point,
+    code.event1=code.event1,
+    code.event2=code.event2,
+    code.censoring=code.censoring,
+    code.exposure.ref=code.exposure.ref
+  )
   optim.method <- list(
     outer.optim.method = outer.optim.method,
     inner.optim.method = inner.optim.method,
@@ -142,15 +155,16 @@ polyreg <- function(
   #######################################################################################################
   # 3. Calculating IPCW (function: calculateIPW)
   #######################################################################################################
+
   if (outcome.type == 'PROPORTIONAL') {
     i_time <- 0
     ip.weight.matrix <- matrix(NA, nrow=out_normalizeCovariate$n, ncol=length(time.point))
     for (specific.time in time.point) {
       i_time <- i_time + 1
-      ip.weight.matrix[,i_time] <- calculateIPCW(formula = cens.model, data = sorted_data, specific.time = specific.time)
+      ip.weight.matrix[,i_time] <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = specific.time)
     }
   } else {
-    ip.weight <- calculateIPCW(formula = cens.model, data = sorted_data, specific.time = estimand$time.point)
+    ip.weight <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = estimand$time.point)
   }
 
   #######################################################################################################

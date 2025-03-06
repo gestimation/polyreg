@@ -18,12 +18,12 @@ calculatePotentialCIFs <- function(
   alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
   beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
 
-  n_epsilon <- length(epsilon)
+  n <- length(epsilon)
   p0 <- c(
-    sum(epsilon == 1) / n_epsilon + prob.bound,
-    sum(epsilon == 2) / n_epsilon + prob.bound,
-    sum(epsilon == 1) / n_epsilon + prob.bound,
-    sum(epsilon == 2) / n_epsilon + prob.bound
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
   )
   log_p0 <- log(p0)
   list.CIFs <- vector("list", nrow(x_l))

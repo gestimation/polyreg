@@ -31,15 +31,22 @@ estimating_equation_ipcw <- function(
     offset <- rep(0, nrow(mf))
   }
 
-  y_0 <- ifelse(epsilon == 0 | t > estimand$time.point, 1, 0)
-  y_1 <- ifelse(epsilon == 1 & t <= estimand$time.point, 1, 0)
-  y_2 <- ifelse(epsilon == 2 & t <= estimand$time.point, 1, 0)
-  y_0_ <- ifelse(epsilon == 0, 1, 0)
-  y_1_ <- ifelse(epsilon == 1, 1, 0)
-  y_2_ <- ifelse(epsilon == 2, 1, 0)
+  #y_0 <- ifelse(epsilon == 0 | t > estimand$time.point, 1, 0)
+  #y_1 <- ifelse(epsilon == 1 & t <= estimand$time.point, 1, 0)
+  #y_2 <- ifelse(epsilon == 2 & t <= estimand$time.point, 1, 0)
+  #y_0_ <- ifelse(epsilon == 0, 1, 0)
+  #y_1_ <- ifelse(epsilon == 1, 1, 0)
+  #y_2_ <- ifelse(epsilon == 2, 1, 0)
+
+  y_0 <- ifelse(epsilon == estimand$code.censoring | t > estimand$time.point, 1, 0)
+  y_1 <- ifelse(epsilon == estimand$code.event1 & t <= estimand$time.point, 1, 0)
+  y_2 <- ifelse(epsilon == estimand$code.event2 & t <= estimand$time.point, 1, 0)
+  y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
+  y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
+  y_2_ <- ifelse(epsilon == estimand$code.event2, 1, 0)
 
   a_ <- as.factor(data[[exposure]])
-  if (estimand$exposure.reference==0) {
+  if (estimand$code.exposure.ref==0) {
     x_a <- as.matrix(model.matrix(~ a_)[, -1])
   } else {
     x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
@@ -54,9 +61,6 @@ estimating_equation_ipcw <- function(
   a <- as.vector(x_a)
   ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
   ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
-  # x_a_ <- cbind(1-rowSums(as.matrix(x_a)), x_a)
-  # ey_1 <- rowSums(x_a_ * pred[,1:(ncol(pred)/2)])
-  # ey_2 <- rowSums(x_a_ * pred[,(ncol(pred)/2+1):ncol(pred)])
 
   v11 <- ey_1 * (1 - ey_1)
   v12 <- -ey_1 * ey_2
@@ -248,13 +252,13 @@ estimating_equation_survival <- function(
     offset <- rep(0, nrow(mf))
   }
 
-  y_0 <- ifelse(epsilon == 0 | t > estimand$time.point, 1, 0)
-  y_1 <- ifelse(epsilon == 1 & t <= estimand$time.point, 1, 0)
-  y_0_ <- ifelse(epsilon == 0, 1, 0)
-  y_1_ <- ifelse(epsilon == 1, 1, 0)
+  y_0 <- ifelse(epsilon == estimand$code.censoring | t > estimand$time.point, 1, 0)
+  y_1 <- ifelse(epsilon == estimand$code.event1 & t <= estimand$time.point, 1, 0)
+  y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
+  y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
 
   a_ <- as.factor(data[[exposure]])
-  if (estimand$exposure.reference==0) {
+  if (estimand$code.exposure.ref==0) {
     x_a <- as.matrix(model.matrix(~ a_)[, -1])
   } else {
     x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
@@ -374,7 +378,6 @@ calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   return(d_11)
 }
 
-
 estimating_equation_proportional <- function(
   formula,
   data,
@@ -409,12 +412,12 @@ estimating_equation_proportional <- function(
     offset <- rep(0, nrow(mf))
   }
 
-  y_0_ <- ifelse(epsilon == 0, 1, 0)
-  y_1_ <- ifelse(epsilon == 1, 1, 0)
-  y_2_ <- ifelse(epsilon == 2, 1, 0)
+  y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
+  y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
+  y_2_ <- ifelse(epsilon == estimand$code.event2, 1, 0)
 
   a_ <- as.factor(data[[exposure]])
-  if (estimand$exposure.reference==0) {
+  if (estimand$code.exposure.ref==0) {
     x_a <- as.matrix(model.matrix(~ a_)[, -1])
   } else {
     x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])

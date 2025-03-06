@@ -16,7 +16,7 @@ calculateInitialValues <- function(
     if (any(t<0))
       stop("Expected non-negative time variable")
     epsilon <- Y[, 2]  # status variable
-    checkInput2(epsilon, outcome.type)
+    checkInput2(epsilon, estimand, outcome.type)
   } else {
     stop("Invalid outcome variables. Must be survival or competing risks outcome")
   }
@@ -37,7 +37,7 @@ calculateInitialValues <- function(
     stop("Variables contain NA values")
 
   a_ <- as.factor(data[[exposure]])
-  if (estimand$exposure.reference==0) {
+  if (estimand$code.exposure.ref==0) {
     x_a <- as.matrix(model.matrix(~ a_)[, -1])
   } else {
     x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
@@ -50,7 +50,6 @@ calculateInitialValues <- function(
     x_l <- model.matrix(Terms, mf)
     if (!(1+ncol(x_l))*2 == length(data.initial.values))
       stop("Invalid initial value dataset. Must contain the same number of initial values as parameters")
-#    out <- list(init_vals = t(as.matrix(data.initial.values)))
     return(data.initial.values)
   }
 
@@ -129,17 +128,17 @@ calc_initial_1_competing_risk <- function(t, epsilon, a, l, estimand, specific.t
   t01 <- t[a == 0 & l == 1]
   t11 <- t[a == 1 & l == 1]
 
-  p_100 <- (sum(epsilon00==1 & t00<=specific.time)/length(epsilon00)) + prob.bound
-  p_200 <- (sum(epsilon00==2 & t00<=specific.time)/length(epsilon00)) + prob.bound
+  p_100 <- (sum(epsilon00==estimand$code.event1 & t00<=specific.time)/length(epsilon00)) + prob.bound
+  p_200 <- (sum(epsilon00==estimand$code.event2 & t00<=specific.time)/length(epsilon00)) + prob.bound
   p_000 <- 1 - p_100 - p_200
-  p_110 <- (sum(epsilon10==1 & t10<=specific.time)/length(epsilon10)) + prob.bound
-  p_210 <- (sum(epsilon10==2 & t10<=specific.time)/length(epsilon10)) + prob.bound
+  p_110 <- (sum(epsilon10==estimand$code.event1 & t10<=specific.time)/length(epsilon10)) + prob.bound
+  p_210 <- (sum(epsilon10==estimand$code.event2 & t10<=specific.time)/length(epsilon10)) + prob.bound
   p_010 <- 1 - p_110 - p_210
-  p_101 <- (sum(epsilon01==1 & t01<=specific.time)/length(epsilon01)) + prob.bound
-  p_201 <- (sum(epsilon01==2 & t01<=specific.time)/length(epsilon01)) + prob.bound
+  p_101 <- (sum(epsilon01==estimand$code.event1 & t01<=specific.time)/length(epsilon01)) + prob.bound
+  p_201 <- (sum(epsilon01==estimand$code.event2 & t01<=specific.time)/length(epsilon01)) + prob.bound
   p_001 <- 1 - p_101 - p_201
-  p_111 <- (sum(epsilon11==1 & t11<=specific.time)/length(epsilon11)) + prob.bound
-  p_211 <- (sum(epsilon11==2 & t11<=specific.time)/length(epsilon11)) + prob.bound
+  p_111 <- (sum(epsilon11==estimand$code.event1 & t11<=specific.time)/length(epsilon11)) + prob.bound
+  p_211 <- (sum(epsilon11==estimand$code.event2 & t11<=specific.time)/length(epsilon11)) + prob.bound
   p_011 <- 1 - p_111 - p_211
   if (p_100 == 0 | is.na(p_100)) { stop("Compelete separation detected in initial value search") }
   if (p_200 == 0 | is.na(p_200)) { stop("Compelete separation detected in initial value search") }
@@ -164,11 +163,11 @@ calc_initial_1_competing_risk <- function(t, epsilon, a, l, estimand, specific.t
   t0 <- t[a == 0]
   t1 <- t[a == 1]
 
-  p_10 <- (sum(epsilon0==1 & t0<=specific.time)/length(epsilon0)) + prob.bound
-  p_20 <- (sum(epsilon0==2 & t0<=specific.time)/length(epsilon0)) + prob.bound
+  p_10 <- (sum(epsilon0==estimand$code.event1 & t0<=specific.time)/length(epsilon0)) + prob.bound
+  p_20 <- (sum(epsilon0==estimand$code.event2 & t0<=specific.time)/length(epsilon0)) + prob.bound
   p_00 <- 1 - p_10 - p_20
-  p_11 <- (sum(epsilon1==1 & t1<=specific.time)/length(epsilon1)) + prob.bound
-  p_21 <- (sum(epsilon1==2 & t1<=specific.time)/length(epsilon1)) + prob.bound
+  p_11 <- (sum(epsilon1==estimand$code.event1 & t1<=specific.time)/length(epsilon1)) + prob.bound
+  p_21 <- (sum(epsilon1==estimand$code.event2 & t1<=specific.time)/length(epsilon1)) + prob.bound
   p_01 <- 1 - p_11 - p_21
 
   if (estimand$effect.measure1 == 'RR') {
@@ -189,12 +188,7 @@ calc_initial_1_competing_risk <- function(t, epsilon, a, l, estimand, specific.t
   } else {
     stop("Invalid effect measure code. Must be RR, OR or SHR.")
   }
-  effect.modifier <- NULL
-  if (is.null(effect.modifier)) {
-    alpha_beta_univariable=cbind(alpha_10, alpha_11, beta_1, alpha_20, alpha_21, beta_2)
-  } else {
-    alpha_beta_univariable=cbind(alpha_10, alpha_11, beta_1, 0, alpha_20, alpha_21, beta_2, 0)
-  }
+  alpha_beta_univariable=cbind(alpha_10, alpha_11, beta_1, alpha_20, alpha_21, beta_2)
   return(alpha_beta_univariable)
 }
 
@@ -204,11 +198,11 @@ calc_initial_2_competing_risk <- function(t, epsilon, a, estimand, specific.time
   t0 <- t[a == 0]
   t1 <- t[a == 1]
 
-  p_10 <- (sum(epsilon0==1 & t0<=specific.time)/length(epsilon0)) + prob.bound
-  p_20 <- (sum(epsilon0==2 & t0<=specific.time)/length(epsilon0)) + prob.bound
+  p_10 <- (sum(epsilon0==estimand$code.event1 & t0<=specific.time)/length(epsilon0)) + prob.bound
+  p_20 <- (sum(epsilon0==estimand$code.event2 & t0<=specific.time)/length(epsilon0)) + prob.bound
   p_00 <- 1 - p_10 - p_20
-  p_11 <- (sum(epsilon1==1 & t1<=specific.time)/length(epsilon1)) + prob.bound
-  p_21 <- (sum(epsilon1==2 & t1<=specific.time)/length(epsilon1)) + prob.bound
+  p_11 <- (sum(epsilon1==estimand$code.event1 & t1<=specific.time)/length(epsilon1)) + prob.bound
+  p_21 <- (sum(epsilon1==estimand$code.event2 & t1<=specific.time)/length(epsilon1)) + prob.bound
   p_01 <- 1 - p_11 - p_21
 
   if (estimand$effect.measure1 == 'RR') {
@@ -232,12 +226,7 @@ calc_initial_2_competing_risk <- function(t, epsilon, a, estimand, specific.time
   alpha_1 <- log( (p_10*p_11/(p_00*p_01) ))
   alpha_2 <- log( (p_20*p_21/(p_00*p_01) ))
 
-  effect.modifier <- NULL
-  if (is.null(effect.modifier)) {
-    alpha_beta_nocovariates <- cbind(alpha_1, beta_1, alpha_2, beta_2)
-  } else {
-    alpha_beta_nocovariates <- cbind(alpha_1, beta_1,0, alpha_2, beta_2,0)
-  }
+  alpha_beta_nocovariates <- cbind(alpha_1, beta_1, alpha_2, beta_2)
   return(alpha_beta_nocovariates)
 }
 
@@ -251,13 +240,13 @@ calc_initial_1_survival <- function(t, epsilon, a, l, estimand, specific.time, p
   t01 <- t[a == 0 & l == 1]
   t11 <- t[a == 1 & l == 1]
 
-  p_100 <- (sum(epsilon00==1 & t00<=specific.time)/length(epsilon00)) + prob.bound
+  p_100 <- (sum(epsilon00==estimand$code.event1 & t00<=specific.time)/length(epsilon00)) + prob.bound
   p_000 <- 1 - p_100
-  p_110 <- (sum(epsilon10==1 & t10<=specific.time)/length(epsilon10)) + prob.bound
+  p_110 <- (sum(epsilon10==estimand$code.event1 & t10<=specific.time)/length(epsilon10)) + prob.bound
   p_010 <- 1 - p_110
-  p_101 <- (sum(epsilon01==1 & t01<=specific.time)/length(epsilon01)) + prob.bound
+  p_101 <- (sum(epsilon01==estimand$code.event1 & t01<=specific.time)/length(epsilon01)) + prob.bound
   p_001 <- 1 - p_101
-  p_111 <- (sum(epsilon11==1 & t11<=specific.time)/length(epsilon11)) + prob.bound
+  p_111 <- (sum(epsilon11==estimand$code.event1 & t11<=specific.time)/length(epsilon11)) + prob.bound
   p_011 <- 1 - p_111
 
   if (p_100 == 0 | is.na(p_100)) { stop("Compelete separation detected in initial value search") }
@@ -276,9 +265,9 @@ calc_initial_1_survival <- function(t, epsilon, a, l, estimand, specific.time, p
   epsilon1 <- epsilon[a == 1]
   t0 <- t[a == 0]
   t1 <- t[a == 1]
-  p_10 <- (sum(epsilon0==1 & t0<=specific.time)/length(epsilon0)) + prob.bound
+  p_10 <- (sum(epsilon0==estimand$code.event1 & t0<=specific.time)/length(epsilon0)) + prob.bound
   p_00 <- 1 - p_10
-  p_11 <- (sum(epsilon1==1 & t1<=specific.time)/length(epsilon1)) + prob.bound
+  p_11 <- (sum(epsilon1==estimand$code.event1 & t1<=specific.time)/length(epsilon1)) + prob.bound
   p_01 <- 1 - p_11
 
   if (estimand$effect.measure1 == 'RR') {
@@ -291,12 +280,7 @@ calc_initial_1_survival <- function(t, epsilon, a, l, estimand, specific.time, p
     stop("Invalid effect measure code. Must be RR, OR or SHR.")
   }
 
-  effect.modifier <- NULL
-  if (is.null(effect.modifier)) {
-    alpha_beta_univariable=cbind(alpha_10, alpha_11, beta_1)
-  } else {
-    alpha_beta_univariable=cbind(alpha_10, alpha_11, beta_1, 0)
-  }
+  alpha_beta_univariable=cbind(alpha_10, alpha_11, beta_1)
   return(alpha_beta_univariable)
 }
 
@@ -305,9 +289,9 @@ calc_initial_2_survival <- function(t, epsilon, a, estimand, specific.time, prob
   epsilon1 <- epsilon[a == 1]
   t0 <- t[a == 0]
   t1 <- t[a == 1]
-  p_10 <- (sum(epsilon0==1 & t0<=specific.time)/length(epsilon0)) + prob.bound
+  p_10 <- (sum(epsilon0==estimand$code.event1 & t0<=specific.time)/length(epsilon0)) + prob.bound
   p_00 <- 1 - p_10
-  p_11 <- (sum(epsilon1==1 & t1<=specific.time)/length(epsilon1)) + prob.bound
+  p_11 <- (sum(epsilon1==estimand$code.event1 & t1<=specific.time)/length(epsilon1)) + prob.bound
   p_01 <- 1 - p_11
 
   if (estimand$effect.measure1 == 'RR') {
@@ -321,12 +305,7 @@ calc_initial_2_survival <- function(t, epsilon, a, estimand, specific.time, prob
   }
   alpha_1 <- log( (p_10*p_11/(p_00*p_01) ))
 
-  effect.modifier <- NULL
-  if (is.null(effect.modifier)) {
-    alpha_beta_nocovariates <- cbind(alpha_1, beta_1)
-  } else {
-    alpha_beta_nocovariates <- cbind(alpha_1, beta_1, 0)
-  }
+  alpha_beta_nocovariates <- cbind(alpha_1, beta_1)
   return(alpha_beta_nocovariates)
 }
 
@@ -446,13 +425,9 @@ checkInput1 <- function(outcome.type, time.point, conf.level, outer.optim.method
   }
 }
 
-checkInput2 <- function(epsilon, outcome.type) {
-  if (!all(epsilon %in% c(0, 1, 2))) {
-    stop("Invalid event code. Must be 0, 1 or 2, with 0 representing censoring")
-  } else if (outcome.type == 'COMPETINGRISK' & all(epsilon %in% c(0, 1))) {
-    stop("Invalid event code. Expected both event code 1 and 2 with competing risks outcome")
-  } else if (outcome.type == 'SURVIVAL' & !all(epsilon %in% c(0, 1))) {
-    stop("Invalid event code. Must be 0 or 1, with 0 representing censoring")
+checkInput2 <- function(epsilon, estimand, outcome.type) {
+  if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring))) {
+      stop("Invalid event codes. Must be 0, 1 or 2, with 0 representing censoring, if event codes are not specified. ")
   }
 }
 

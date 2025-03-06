@@ -32,36 +32,35 @@ Direct polynomial regression can model multiple competing events jointly
 and estimates multipilcative effects on cumulative probabilities (or a
 risk when there is only one type of event, that is, survival data) from
 competing risk data (or survival data) under right-censoring. The models
-assumed in polyreg are specified by (1) nuisance.model, (2) cens.model
-and (3) exposure, effect measures, and the time point of interest.
+assumed in polyreg are specified by (1) nuisance.model, (2) exposure,
+effect measures, and the time point of interest and (3) strata for
+adjustment for dependent censoring.
 
 1)  nuisance.model specifies the model formula for the nuisance model
     that represents the relationship between outcome and covariates
     other than exposure, in which the outcome should be formatted as
-    type Surv or Event that shoyuld include a time variable and a status
-    variable. For competing risk data, event codes 1 and 2 are used, and
-    for survival data, event code 1 is used, with code 0 indicating a
-    censored observation. Another argument outcome.type selects a model
-    suitable for the outcome type by selecting COMPETINGRISK and
-    SURVIVAL, and must be consistent with the event code of the model
-    formula. To obtain valid estimates of the exposure effects,
-    covariates in the model format should include confounding factors to
-    be adjusted for.
+    type Surv or Event that should include a time variable and a status
+    variable. For competing risk data, event codes 1 and 2 are default,
+    and for survival data, event code 1 is default, with code 0
+    indicating a censored observation. The event codes are selected by
+    code.event1, code.event2, and code.censoring. Another argument
+    outcome.type selects a model suitable for the outcome type by
+    selecting COMPETINGRISK and SURVIVAL, and must be consistent with
+    the event code of the model formula. To obtain valid estimates of
+    the exposure effects, covariates in the model format should include
+    confounding factors to be adjusted for.
 
-2)  cens.model is a specification for obtaining inverse probability
-    weights to adjust for censoring. The same time variable and status
-    variable as in (1) should be used for the outcome, but the event
-    code to indicate censoring should be 0. If only the intercept is
-    specified as the covariate, weights based on the Kaplan-Meier
-    estimator are calculated. If a stratified variable is specified
-    using strata() as a covariate, dependent censoring is taken into
-    account by the stratified Kaplan-Meier estimator.
-
-3)  The effect measure options include risk ratio (RR), odds ratio (OR)
+2)  The effect measure options include risk ratio (RR), odds ratio (OR)
     and sub-distribution hazard ratio (SHR), any of which can be
     selected using effect.measure1 and effect.measure2. The time point
     at which these multiplicative effects are estimated is also
     specified by time.point.
+
+3)  The model for obtaining inverse probability weights to adjust for
+    censoring is specified by strata. If a stratified variable is
+    specified, dependent censoring is taken into account by the
+    stratified Kaplan-Meier estimator, otherwise weights based on the
+    Kaplan-Meier estimator are calculated.
 
 The output of polyreg is a list of coefficient, cov, summary and
 summary.full.
@@ -76,8 +75,7 @@ and covariates (intercept in this case) in the models are presented.
 ``` r
 library(polyreg)
 data(diabetes.complications)
-output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1',
-          cens.model = Event(t,epsilon==0) ~ 1, data = diabetes.complications,
+output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1', data = diabetes.complications,
           effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
 print(output$coefficient)
 #> [1] -1.38313105  0.30043925 -3.99147261  0.07582589
@@ -103,9 +101,9 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 
 <table style="width:99%;">
 <colgroup>
-<col style="width: 28%" />
+<col style="width: 29%" />
 <col style="width: 35%" />
-<col style="width: 35%" />
+<col style="width: 34%" />
 </colgroup>
 <thead>
 <tr class="header">
@@ -137,8 +135,8 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="odd">
 <td>effect.measure</td>
-<td>RR of fruitq1 at 8 ( ref = 0 )</td>
-<td>RR of fruitq1 at 8 ( ref = 0 )</td>
+<td>RR of fruitq1 at 8 ( ref = )</td>
+<td>RR of fruitq1 at 8 ( ref = )</td>
 </tr>
 <tr class="even">
 <td>n.events</td>
@@ -184,16 +182,15 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 The second example is survival analysis (outcome.type=‘SURVIVAL’) to
 estimate the effects on the risk of diabetic retinopathy at 8 years of
 follow-up, treating macrovascular complications as censoring. 15
-covariates and censoring strata are specified in nuisance.model and
-cens.model, respectively.
+covariates and censoring strata are specified in nuisance.model= and
+strata=, respectively.
 
 ``` r
 data(diabetes.complications)
 diabetes.complications$d <- (diabetes.complications$epsilon>0)
-output <- polyreg(nuisance.model = Event(t,d) ~ age+sex+bmi+hba1c
-          +diabetes_duration+drug_oha+drug_insulin+sbp+ldl+hdl+tg
-          +current_smoker+alcohol_drinker+ltpa, exposure = 'fruitq1',
-          cens.model = Event(t,d==0)~strata(strata), data = diabetes.complications,
+output <- polyreg(nuisance.model = Event(t,d) ~ age+sex+bmi+hba1c+diabetes_duration
+          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa, 
+          exposure = 'fruitq1', strata='strata', data = diabetes.complications,
           effect.measure1='RR', time.point=8, outcome.type='SURVIVAL')
 ```
 
@@ -207,9 +204,9 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 
 |                      | event 1 (no competing risk)              |
 |----------------------|------------------------------------------|
-| fruitq1 ( ref = 0 )  | 1.366                                    |
+| fruitq1 ( ref = )    | 1.366                                    |
 |                      | \[1.154, 1.617\]                         |
-| effect.measure       | RR of fruitq1 at 8 ( ref = 0 )           |
+| effect.measure       | RR of fruitq1 at 8 ( ref = )             |
 | n.events             | 358                                      |
 | n.events.exposed     | 113 events in 258 exposed observations   |
 | n.events.unexposed   | 245 events in 720 unexposed observations |
@@ -219,17 +216,16 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 
 The code below specifies direct polytomous regression of both of
 competing events (outcome.type=‘COMPETINGRISK’). Initial values of
-regression parameters are imported as data.initial.values.
+regression parameters are imported by data.initial.values=.
 
 ``` r
 data.initial.values <- c(-20.01, 1.591, -0.2065, 1.962, 10.05, 4.004, 0.9624, 1.582, 2.414, -0.02140,
                          1.072, 1.304, -0.6444, -1.600, -0.01816, 0.4460, -29.25, 6.586, -1.090, 3.515,
                          4.048, -5.012, 0.05348, 0.1609, 6.432, -0.4783, -3.230, -4.135, 1.451, 0.04964,
                          3.822, -0.08824)
-output <- polyreg(nuisance.model = Event(t,epsilon) ~ age+sex+bmi+hba1c
-          +diabetes_duration+drug_oha+drug_insulin+sbp+ldl+hdl+tg
-          +current_smoker+alcohol_drinker+ltpa, exposure = 'fruitq1',
-          cens.model=Event(t,epsilon==0)~strata(strata),data=diabetes.complications,
+output <- polyreg(nuisance.model = Event(t,epsilon) ~ age+sex+bmi+hba1c+diabetes_duration
+          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa, 
+          exposure = 'fruitq1', strata='strata', data=diabetes.complications,
           effect.measure1='RR', time.point=8, outcome.type='COMPETINGRISK',
           data.initial.values=data.initial.values)
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
@@ -250,14 +246,14 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 </thead>
 <tbody>
 <tr class="odd">
-<td>fruitq1 ( ref = 0 )</td>
-<td>1.557</td>
+<td>fruitq1 ( ref = )</td>
+<td>1.558</td>
 <td>0.913</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[1.311, 1.850]</td>
-<td>[0.461, 1.805]</td>
+<td>[1.311, 1.851]</td>
+<td>[0.461, 1.806]</td>
 </tr>
 <tr class="odd">
 <td>effect.measure</td>
