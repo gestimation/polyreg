@@ -31,7 +31,7 @@
 #' @importFrom nleqslv nleqslv
 #'
 #' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
-#' @export The output of polyreg is a list of coefficient, cov, diagnosis.statistics, summary and summary.full.  We recommend using summary or summary.full to display the results of the analysis. The regression coefficients and their variance-covariance matrix are also provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
+#' @export
 #'
 #' @examples
 #' data(diabetes.complications)
