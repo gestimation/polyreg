@@ -56,14 +56,22 @@ adjustment for dependent censoring.
     at which these multiplicative effects are estimated is also
     specified by time.point.
 
-3)  The model for obtaining inverse probability weights to adjust for
+3)  The model for calculating inverse probability weights to adjust for
     censoring is specified by strata. If a stratified variable is
     specified, dependent censoring is taken into account by the
     stratified Kaplan-Meier estimator, otherwise weights based on the
     Kaplan-Meier estimator are calculated.
 
-The output of polyreg is a list of coefficient, cov, summary and
-summary.full.
+The output of polyreg is a list of coefficient, cov,
+diagnosis.statistics, summary and summary.full. We recommend using
+summary or summary.full to display the results of the analysis. The
+regression coefficients and their variance-covariance matrix are also
+provided as coefficient and cov, respectively, with the first element
+corresponding to the intercept term, subsequent elements to the
+covariates in nuisance.model, and the last element to exposure. Finally,
+diagnosis.statistics is a dataset containing inverse probability
+weights, influence functions, and predicted values of the potential
+outcomes of individual observations.
 
 ## Example
 
@@ -77,6 +85,7 @@ library(polyreg)
 data(diabetes.complications)
 output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1', data = diabetes.complications,
           effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+#> [1] "intercept" "exposure"  "intercept" "exposure"
 print(output$coefficient)
 #> [1] -1.38313105  0.30043925 -3.99147261  0.07582589
 print(output$cov)
@@ -228,6 +237,13 @@ output <- polyreg(nuisance.model = Event(t,epsilon) ~ age+sex+bmi+hba1c+diabetes
           exposure = 'fruitq1', strata='strata', data=diabetes.complications,
           effect.measure1='RR', time.point=8, outcome.type='COMPETINGRISK',
           data.initial.values=data.initial.values)
+#>  [1] "intercept"   "covariate1"  "covariate2"  "covariate3"  "covariate4" 
+#>  [6] "covariate5"  "covariate6"  "covariate7"  "covariate8"  "covariate9" 
+#> [11] "covariate10" "covariate11" "covariate12" "covariate13" "covariate14"
+#> [16] "exposure"    "intercept"   "covariate1"  "covariate2"  "covariate3" 
+#> [21] "covariate4"  "covariate5"  "covariate6"  "covariate7"  "covariate8" 
+#> [26] "covariate9"  "covariate10" "covariate11" "covariate12" "covariate13"
+#> [31] "covariate14" "exposure"
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
@@ -247,13 +263,13 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 <tbody>
 <tr class="odd">
 <td>fruitq1 ( ref = )</td>
-<td>1.558</td>
+<td>1.557</td>
 <td>0.913</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[1.311, 1.851]</td>
-<td>[0.461, 1.806]</td>
+<td>[1.311, 1.850]</td>
+<td>[0.461, 1.805]</td>
 </tr>
 <tr class="odd">
 <td>effect.measure</td>

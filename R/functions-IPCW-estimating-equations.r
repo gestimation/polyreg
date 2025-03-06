@@ -87,7 +87,7 @@ estimating_equation_ipcw <- function(
   for (j in seq_len(n_col_d)) {
     score.matrix[,j] <- d[,j]*residual
   }
-
+  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
   out <- list(
     ret   = ret,
     score = score.matrix,
@@ -171,7 +171,13 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   total_score <- cbind(AB1, AB2)
   influence.function <- total_score %*% t(solve(hesse))
   cov_estimated <- t(influence.function) %*% influence.function / n / n
-
+  if (ncol(influence.function)==4) {
+    colnames(influence.function) <- c("intercept", "exposure", "intercept", "exposure")
+  } else {
+    colnames(influence.function) <- c("intercept", paste("covariate", 1:(ncol(influence.function)/2 - 2), sep = ""), "exposure",
+                                      "intercept", paste("covariate", 1:(ncol(influence.function)/2 - 2), sep = ""), "exposure")
+  }
+  print(colnames(influence.function))
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 

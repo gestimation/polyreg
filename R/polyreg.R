@@ -31,7 +31,7 @@
 #' @importFrom nleqslv nleqslv
 #'
 #' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
-#' @export
+#' @export The output of polyreg is a list of coefficient, cov, diagnosis.statistics, summary and summary.full.  We recommend using summary or summary.full to display the results of the analysis. The regression coefficients and their variance-covariance matrix are also provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
 #'
 #' @examples
 #' data(diabetes.complications)
@@ -67,10 +67,10 @@ polyreg <- function(
 ) {
 
   #######################################################################################################
-  # 1. Pre-processing (function: checkSpell, checkInput1, normalizeCovariate, sortByCovariate)
+  # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
   checkSpell(outcome.type, effect.measure1, effect.measure2)
-  checkInput1(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method)
+  checkInput(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method)
   outcome.type <- outcome.type.corrected
   effect.measure1 <- effect.measure1.corrected
   effect.measure2 <- effect.measure2.corrected
@@ -104,7 +104,19 @@ polyreg <- function(
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
   #######################################################################################################
-  if (outcome.type == 'PROPORTIONAL') {
+  if (outcome.type == 'COMPETINGRISK' | outcome.type == 'SURVIVAL') {
+    out_calculateInitialValues <- calculateInitialValues(
+      formula = nuisance.model,
+      data = sorted_data,
+      exposure = exposure,
+      data.initial.values = data.initial.values,
+      estimand = estimand,
+      specific.time = estimand$time.point,
+      outcome.type = outcome.type,
+      prob.bound = prob.bound
+    )
+    alpha_beta_0 <- out_calculateInitialValues
+  } else if (outcome.type == 'PROPORTIONAL') {
     n_para_1 <- out_normalizeCovariate$n_covariate+1
     n_para_2 <- out_normalizeCovariate$n_covariate+2
     n_para_3 <- out_normalizeCovariate$n_covariate+3
@@ -112,9 +124,7 @@ polyreg <- function(
     n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
     n_para_6 <- length(time.point)*(n_para_5-2) + 2
     alpha_beta_0 <- rep(NA, n_para_6) # initial parameters for event 1 and 2 over time points
-    i_time <- 0
-    sum1 <- 0
-    sum2 <- 0
+    i_time <- sum1 <- sum2 <- 0
     for (specific.time in time.point) {
       specific.time <- as.numeric(specific.time)
       out_calculateInitialValues <- calculateInitialValues(
@@ -138,33 +148,20 @@ polyreg <- function(
     }
     alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
     alpha_beta_0[n_para_6]    <- sum2/length(time.point)
-  } else {
-    out_calculateInitialValues <- calculateInitialValues(
-      formula = nuisance.model,
-      data = sorted_data,
-      exposure = exposure,
-      data.initial.values = data.initial.values,
-      estimand = estimand,
-      specific.time = estimand$time.point,
-      outcome.type = outcome.type,
-      prob.bound = prob.bound
-    )
-    alpha_beta_0 <- out_calculateInitialValues
   }
 
   #######################################################################################################
-  # 3. Calculating IPCW (function: calculateIPW)
+  # 3. Calculating IPCW (function: calculateIPCW)
   #######################################################################################################
-
-  if (outcome.type == 'PROPORTIONAL') {
+  if (outcome.type == 'COMPETINGRISK' | outcome.type == 'SURVIVAL') {
+    ip.weight <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = estimand$time.point)
+  } else if (outcome.type == 'PROPORTIONAL') {
     i_time <- 0
     ip.weight.matrix <- matrix(NA, nrow=out_normalizeCovariate$n, ncol=length(time.point))
     for (specific.time in time.point) {
       i_time <- i_time + 1
       ip.weight.matrix[,i_time] <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = specific.time)
     }
-  } else {
-    ip.weight <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = estimand$time.point)
   }
 
   #######################################################################################################
@@ -218,7 +215,7 @@ polyreg <- function(
     setInitialCIFs <- function(new.CIFs) {
       initial.CIFs <<- new.CIFs
     }
-    get_results <- function() {
+    getResults <- function() {
       out_ipcw
     }
     list(
@@ -226,7 +223,7 @@ polyreg <- function(
       estimating_equation_s = estimating_equation_s,
       estimating_equation_p = estimating_equation_p,
       setInitialCIFs = setInitialCIFs,
-      get_results = get_results
+      getResults = getResults
     )
   }
 
@@ -273,7 +270,7 @@ polyreg <- function(
       max_param_diff   <- max(param_diff)
       current_params <- new_params
 
-      obj$setInitialCIFs(obj$get_results()$potential.CIFs)
+      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
@@ -314,7 +311,7 @@ polyreg <- function(
       max_param_diff   <- max(param_diff)
       current_params <- new_params
 
-      obj$setInitialCIFs(obj$get_results()$potential.CIFs)
+      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
@@ -355,7 +352,7 @@ polyreg <- function(
       max_param_diff   <- max(param_diff)
       current_params <- new_params
 
-      obj$setInitialCIFs(obj$get_results()$potential.CIFs)
+      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
@@ -364,7 +361,7 @@ polyreg <- function(
   #######################################################################################################
   # 5. Calculating variance (functions: calculateCov, calculateCovSurvival)
   #######################################################################################################
-  objget_results <- obj$get_results()
+  out_getResults <- obj$getResults()
   normalizeEstimate <- function(out_calculateCov, should.normalize.covariate, current_params, out_normalizeCovariate) {
     if (should.normalize.covariate == FALSE & !is.null(out_calculateCov$cov_estimated)) {
       alpha_beta_estimated <- current_params
@@ -386,10 +383,10 @@ polyreg <- function(
   }
 
   if (outcome.type == 'COMPETINGRISK') {
-    out_calculateCov <- calculateCov(objget_results, estimand, prob.bound)
+    out_calculateCov <- calculateCov(out_getResults, estimand, prob.bound)
     out_normalizeEstimate <- normalizeEstimate(out_calculateCov, should.normalize.covariate, current_params, out_normalizeCovariate)
   } else if (outcome.type == 'SURVIVAL') {
-    out_calculateCov <- calculateCovSurvival(objget_results, estimand, prob.bound)
+    out_calculateCov <- calculateCovSurvival(out_getResults, estimand, prob.bound)
     out_normalizeEstimate <- normalizeEstimate(out_calculateCov, should.normalize.covariate, current_params, out_normalizeCovariate)
   } else if (outcome.type == 'PROPORTIONAL') {
     out_calculateCov <- NULL
@@ -408,7 +405,7 @@ polyreg <- function(
   if (outcome.type %in% names(reportSummary)) {
     out_summary <- reportSummary[[outcome.type]](
       nuisance.model, exposure, estimand, alpha_beta_estimated,
-      cov_estimated, objget_results, iteration, max_param_diff, sol,
+      cov_estimated, out_getResults, iteration, max_param_diff, sol,
       conf.level, optim.method$outer.optim.method
     )
     #    out_prediction <- reportPrediction(nuisance.model,data,exposure,alpha_beta_estimated,cov_estimated,outcome.type,estimand,optim.method,prob.bound)
@@ -420,20 +417,20 @@ polyreg <- function(
   if (outcome.type %in% names(reportSummaryFull)) {
     out_summary_full <- reportSummaryFull[[outcome.type]](
       nuisance.model, exposure, estimand, alpha_beta_estimated,
-      cov_estimated, objget_results, iteration, max_param_diff, sol,
+      cov_estimated, out_getResults, iteration, max_param_diff, sol,
       conf.level, optim.method$outer.optim.method
     )
-    #    out_prediction <- reportPrediction(nuisance.model,data,exposure,alpha_beta_estimated,cov_estimated,outcome.type,estimand,optim.method,prob.bound)
   }
-  #  if (outcome.type == 'PROPORTIONAL') {
-  #    out_summary <- NULL
-  #    out_prediction <- NULL
-  #    sorted_data$ip.weight <- objget_results$ip.weight
-  #  } else {
-  #    sorted_data$influence.function <- out_calculateCov$influence.function
-  #    sorted_data$ip.weight <- objget_results$ip.weight
-  #  }
-  #  out <- list(summary = out_summary, prediction = out_prediction, coefficient=alpha_beta_estimated, coefficient.before.normalization=current_params, cov=cov_estimated, ipw.influence=sorted_data)
-  out <- list(summary = out_summary, summary.full = out_summary_full, coefficient=alpha_beta_estimated, cov=cov_estimated)
+  if (outcome.type == 'PROPORTIONAL') {
+    out_summary <- NULL
+    out_summary_full <- NULL
+    out_data <- NULL
+  } else {
+    sorted_data$influence.function <- out_calculateCov$influence.function
+    sorted_data$ip.weight <- out_getResults$ip.weight
+    sorted_data$potential.CIFs <- out_getResults$potential.CIFs
+    out_data <- sorted_data
+  }
+  out <- list(summary = out_summary, summary.full = out_summary_full, coefficient=alpha_beta_estimated, cov=cov_estimated, diagnosis.statistics=out_data)
   return(out)
 }

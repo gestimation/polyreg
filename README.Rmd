@@ -47,9 +47,9 @@ Direct polynomial regression can model multiple competing events jointly and est
 
 (2) The effect measure options include risk ratio (RR), odds ratio (OR) and sub-distribution hazard ratio (SHR), any of which can be selected using effect.measure1 and effect.measure2. The time point at which these multiplicative effects are estimated is also specified by time.point. 
 
-(3) The model for obtaining inverse probability weights to adjust for censoring is specified by strata. If a stratified variable is specified, dependent censoring is taken into account by the stratified Kaplan-Meier estimator, otherwise weights based on the Kaplan-Meier estimator are calculated. 
+(3) The model for calculating inverse probability weights to adjust for censoring is specified by strata. If a stratified variable is specified, dependent censoring is taken into account by the stratified Kaplan-Meier estimator, otherwise weights based on the Kaplan-Meier estimator are calculated. 
 
-The output of polyreg is a list of coefficient, cov, summary and summary.full.  
+The output of polyreg is a list of coefficient, cov, diagnosis.statistics, summary and summary.full.  We recommend using summary or summary.full to display the results of the analysis. The regression coefficients and their variance-covariance matrix are also provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
 
 ## Example
 

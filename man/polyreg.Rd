@@ -7,11 +7,14 @@
 polyreg(
   nuisance.model,
   exposure,
-  cens.model,
+  strata = NULL,
   data,
+  code.event1 = 1,
+  code.event2 = 2,
+  code.censoring = 0,
+  code.exposure.ref = 0,
   effect.measure1 = "RR",
   effect.measure2 = "RR",
-  exposure.reference = 0,
   time.point,
   outcome.type = "COMPETINGRISK",
   conf.level = 0.95,
@@ -33,17 +36,23 @@ polyreg(
 \arguments{
 \item{nuisance.model}{formula Model formula representing outcome, exposure and covariates}
 
-\item{exposure}{character Column name representing the exposure (1 = exposed, 0 = not exposed).}
+\item{exposure}{character Column name representing the exposure. The exposure variable should be coded with 0 and 1 (e.g. 1 = exposed, 0 = not exposed).}
 
-\item{cens.model}{formula Model formula representing censoring and covariates.}
+\item{strata}{character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL}
 
 \item{data}{data.frame Input dataset containing survival data.}
+
+\item{code.event1}{integer Specifies the code of event 1. Defaults to 1.}
+
+\item{code.event2}{integer Specifies the code of event 2. Defaults to 2.}
+
+\item{code.censoring}{integer Specifies the code of censoring. Defaults to 0.}
+
+\item{code.exposure.ref}{integer Specifies the code of the reference category of exposure. Defaults to 0.}
 
 \item{effect.measure1}{character Specifies the effect measure for event (RR, OR, SHR).}
 
 \item{effect.measure2}{character Specifies the effect measure for competing risk (RR, OR, SHR).}
-
-\item{exposure.reference}{integer Specifies the code of the reference category of effects. Defaults to 1.}
 
 \item{time.point}{numeric The time point for exposure effects to be estimated.}
 
@@ -84,8 +93,7 @@ A list of results from direct polynomial regression. coefficient and cov are est
 Direct polynomial regression for survival and competing risks analysis
 }
 \examples{
-#' data(bmt)
-result <- polyreg(nuisance.model = Event(time, cause)~age+tcell, exposure = 'platelet',
-cens.model = Event(time,cause==0)~+1, data = bmt, effect.measure1='RR', effect.measure2='RR', time.point=24, outcome.type='COMPETINGRISK')
-msummary(result$out_summary, statistic = c("conf.int"), exponentiate = TRUE)
+data(diabetes.complications)
+output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+msummary(output$out_summary, statistic = c("conf.int"), exponentiate = TRUE)
 }

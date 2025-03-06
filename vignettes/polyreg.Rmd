@@ -24,18 +24,17 @@ library(nleqslv)
 library(modelsummary)
 ```
 
-Direct polynomial regression can model multiple competing events jointly and estimates multipilcative effects on cumulative probabilities (or a risk when there is only one type of event, that is, survival data) from competing risk data (or survival data) under right-censoring. The models assumed in polyreg are specified by (1) nuisance.model, (2) cens.model and (3) exposure, effect measures, and the time point of interest. 
+Direct polynomial regression can model multiple competing events jointly and estimates multipilcative effects on cumulative probabilities (or a risk when there is only one type of event, that is, survival data) from competing risk data (or survival data) under right-censoring. The models assumed in polyreg are specified by (1) nuisance.model, (2) exposure, effect measures, and the time point of interest and (3) strata for adjustment for dependent censoring. 
 
-(1) nuisance.model specifies the model formula for the nuisance model that represents the relationship between outcome and covariates other than exposure, in which the outcome should be formatted as type Surv or Event that shoyuld include a time variable and a status variable. For competing risk data, event codes 1 and 2 are used, and for survival data, event code 1 is used, with code 0 indicating a censored observation. Another argument outcome.type selects a model suitable for the outcome type by selecting COMPETINGRISK and SURVIVAL, and must be consistent with the event code of the model formula. To obtain valid estimates of the exposure effects, covariates in the model format should include confounding factors to be adjusted for. 
+(1) nuisance.model specifies the model formula for the nuisance model that represents the relationship between outcome and covariates other than exposure, in which the outcome should be formatted as type Surv or Event that should include a time variable and a status variable. For competing risk data, event codes 1 and 2 are default, and for survival data, event code 1 is default, with code 0 indicating a censored observation. The event codes are selected by code.event1, code.event2, and code.censoring. Another argument outcome.type selects a model suitable for the outcome type by selecting COMPETINGRISK and SURVIVAL, and must be consistent with the event code of the model formula. To obtain valid estimates of the exposure effects, covariates in the model format should include confounding factors to be adjusted for. 
 
-(2) cens.model is a specification for obtaining inverse probability weights to adjust for censoring. The same time variable and status variable as in (1) should be used for the outcome, but the event code to indicate censoring should be 0. If only the intercept is specified as the covariate, weights based on the Kaplan-Meier estimator are calculated. If a stratified variable is specified using strata() as a covariate, dependent censoring is taken into account by the stratified Kaplan-Meier estimator. 
+(2) The effect measure options include risk ratio (RR), odds ratio (OR) and sub-distribution hazard ratio (SHR), any of which can be selected using effect.measure1 and effect.measure2. The time point at which these multiplicative effects are estimated is also specified by time.point. 
 
-(3) The effect measure options include risk ratio (RR), odds ratio (OR) and sub-distribution hazard ratio (SHR), any of which can be selected using effect.measure1 and effect.measure2. The time point at which these multiplicative effects are estimated is also specified by time.point. 
+(3) The model for calculating inverse probability weights to adjust for censoring is specified by strata. If a stratified variable is specified, dependent censoring is taken into account by the stratified Kaplan-Meier estimator, otherwise weights based on the Kaplan-Meier estimator are calculated. 
 
-The output of polyreg is a list of coefficient, cov, summary and summary.full.  
+The output of polyreg is a list of coefficient, cov, diagnosis.statistics, summary and summary.full.  We recommend using summary or summary.full to display the results of the analysis. The regression coefficients and their variance-covariance matrix are also provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
 
-
-Usage of polyreg is illustrated using diabetes.complications dataset included in R-package. Direct polynomial regression is applied to this dataset to estimate risk ratios of the first quartile of fruit intake (fruitq1=1 indicates the first quartile, fruitq1=0 indicates the third to fourth quartile) on diabetes complications (diabetic retinopathy coded by epsilon=1 and macrovascular complications coded by epsilon=2). 
+## Example
 
 The code below conducts unadjusted analysis focusing on cumulative incidence probabilities of event 1 and 2 at 24 years. Regression coefficients and variance covariance matrix of both exposure (fruitq1) and covariates (intercept in this case) in the models are presented. 
 
@@ -71,7 +70,7 @@ Only the regression coefficient of exposure is included in summary, so now model
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
-The code below specifies direct polytomous regression of both of competing events (outcome.type='COMPETINGRISK'). Initial values of regression parameters are imported by data.initial.values=. 
+The code below specifies direct polytomous regression of both of competing events (outcome.type='COMPETINGRISK'). Initial values of regression parameters are imported by data.initial.values. 
 
 ```{r example5}
 data.initial.values <- c(-20.01, 1.591, -0.2065, 1.962, 10.05, 4.004, 0.9624, 1.582, 2.414, -0.02140,

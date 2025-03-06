@@ -16,7 +16,9 @@ calculateInitialValues <- function(
     if (any(t<0))
       stop("Expected non-negative time variable")
     epsilon <- Y[, 2]  # status variable
-    checkInput2(epsilon, estimand, outcome.type)
+    if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring))) {
+      stop("Invalid event codes. Must be 0, 1 or 2, with 0 representing censoring, if event codes are not specified. ")
+    }
   } else {
     stop("Invalid outcome variables. Must be survival or competing risks outcome")
   }
@@ -403,7 +405,7 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   }
 }
 
-checkInput1 <- function(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method) {
+checkInput <- function(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method) {
   if ((outcome.type == "COMPETINGRISK" | outcome.type == "SURVIVAL") & length(time.point)>1) {
     time.point.corrected <<- max(time.point)
   } else {
@@ -424,10 +426,3 @@ checkInput1 <- function(outcome.type, time.point, conf.level, outer.optim.method
     stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'multiroot'.")
   }
 }
-
-checkInput2 <- function(epsilon, estimand, outcome.type) {
-  if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring))) {
-      stop("Invalid event codes. Must be 0, 1 or 2, with 0 representing censoring, if event codes are not specified. ")
-  }
-}
-
