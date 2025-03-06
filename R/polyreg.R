@@ -36,7 +36,8 @@
 #' @examples
 #' data(diabetes.complications)
 #' output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
-#' msummary(output$out_summary, statistic = c("conf.int"), exponentiate = TRUE)
+#' library(modelsummary)
+#' msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 polyreg <- function(
     nuisance.model,
     exposure,

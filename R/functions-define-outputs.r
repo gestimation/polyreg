@@ -1,10 +1,10 @@
 reportCompetingRisk <- function(nuisance.model, exposure, estimand, alpha_beta_estimated, cov_estimated,
-                                objget_results, iteration, param_diff, sol, conf.level, outer.optim.method) {
+                                out_getResults, iteration, param_diff, sol, conf.level, outer.optim.method) {
   alpha <- 1 - conf.level
   critical_value <- qnorm(1 - alpha / 2)
-  i_parameter <- objget_results$i_parameter
+  i_parameter <- out_getResults$i_parameter
 
-  get_coef_details <- function(index) {
+  getCoefDetails <- function(index) {
     coef <- alpha_beta_estimated[index]
     coef_se <- sqrt(diag(cov_estimated)[index])
     conf_low <- coef - critical_value * coef_se
@@ -13,18 +13,18 @@ reportCompetingRisk <- function(nuisance.model, exposure, estimand, alpha_beta_e
     list(coef = coef, coef_se = coef_se, conf_low = conf_low, conf_high = conf_high, p_value = p_value)
   }
 
-  coef1 <- get_coef_details(i_parameter[3])
-  coef2 <- get_coef_details(i_parameter[7])
+  coef1 <- getCoefDetails(i_parameter[3])
+  coef2 <- getCoefDetails(i_parameter[7])
 
   summary_text <- function(events, observations, exposed) {
     paste(events, "events in", observations, if (exposed) "exposed observations" else "unexposed observations")
   }
 
   text_values <- list(
-    exposure_text   = paste(exposure, "( ref =", estimand$exposure.reference, ")"),
+    exposure_text   = paste(exposure, "( ref =", estimand$code.exposure.ref, ")"),
     effect1_text    = paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point),
     effect2_text    = paste(estimand$effect.measure2, "of", exposure, "at", estimand$time.point),
-    median_followup = paste(median(objget_results$t), "[", min(objget_results$t), ",", max(objget_results$t), "]")
+    median_followup = paste(median(out_getResults$t), "[", min(out_getResults$t), ",", max(out_getResults$t), "]")
   )
 
   tidy_df <- function(coef, text) {
@@ -50,7 +50,7 @@ reportCompetingRisk <- function(nuisance.model, exposure, estimand, alpha_beta_e
     )
   }
 
-  get_message <- function() {
+  getMessage <- function() {
     if (outer.optim.method %in% c("nleqslv", "Newton", "Broyden")) return(sol$message)
     if (outer.optim.method %in% c("optim", "BFGS", "SANN")) return(ifelse(!is.null(sol$message), sol$message, "None"))
     return("-")
@@ -60,17 +60,17 @@ reportCompetingRisk <- function(nuisance.model, exposure, estimand, alpha_beta_e
     event1 = list(
       tidy = tidy_df(coef1, text_values$exposure_text),
       glance = glance_df(text_values$effect1_text,
-                         sum(objget_results$y_1),
-                         summary_text(sum(objget_results$y_1 * objget_results$x_a), sum(objget_results$x_a), TRUE),
-                         summary_text(sum(objget_results$y_1 * (1 - objget_results$x_a)), length(objget_results$y_1) - sum(objget_results$x_a), FALSE),
+                         sum(out_getResults$y_1),
+                         summary_text(sum(out_getResults$y_1 * out_getResults$x_a), sum(out_getResults$x_a), TRUE),
+                         summary_text(sum(out_getResults$y_1 * (1 - out_getResults$x_a)), length(out_getResults$y_1) - sum(out_getResults$x_a), FALSE),
                          i_parameter[3],
-                         get_message())
+                         getMessage())
     ),
     event2 = list(
       tidy = tidy_df(coef2, text_values$exposure_text),
       glance = glance_df(text_values$effect2_text,
-                         sum(objget_results$y_2), summary_text(sum(objget_results$y_2 * objget_results$x_a), sum(objget_results$x_a), TRUE),
-                         summary_text(sum(objget_results$y_2 * (1 - objget_results$x_a)), length(objget_results$y_2) - sum(objget_results$x_a), FALSE),
+                         sum(out_getResults$y_2), summary_text(sum(out_getResults$y_2 * out_getResults$x_a), sum(out_getResults$x_a), TRUE),
+                         summary_text(sum(out_getResults$y_2 * (1 - out_getResults$x_a)), length(out_getResults$y_2) - sum(out_getResults$x_a), FALSE),
                          i_parameter[7] - i_parameter[4] + 1,
                          "-")
     )
@@ -81,12 +81,12 @@ reportCompetingRisk <- function(nuisance.model, exposure, estimand, alpha_beta_e
 }
 
 reportSurvival <- function(nuisance.model, exposure, estimand, alpha_beta_estimated, cov_estimated,
-                           objget_results, iteration, param_diff, sol, conf.level, outer.optim.method) {
+                           out_getResults, iteration, param_diff, sol, conf.level, outer.optim.method) {
   alpha <- 1 - conf.level
   critical_value <- qnorm(1 - alpha / 2)
-  i_parameter <- objget_results$i_parameter
+  i_parameter <- out_getResults$i_parameter
 
-  get_coef_details <- function(index) {
+  getCoefDetails <- function(index) {
     coef <- alpha_beta_estimated[index]
     coef_se <- sqrt(diag(cov_estimated)[index])
     conf_low <- coef - critical_value * coef_se
@@ -99,18 +99,18 @@ reportSurvival <- function(nuisance.model, exposure, estimand, alpha_beta_estima
     paste(events, "events in", observations, if (exposed) "exposed observations" else "unexposed observations")
   }
 
-  coef1 <- get_coef_details(i_parameter[3])
+  coef1 <- getCoefDetails(i_parameter[3])
 
-  exposed_events <- sum(objget_results$y_1 * objget_results$x_a)
-  unexposed_events <- sum(objget_results$y_1 * (1 - objget_results$x_a))
+  exposed_events <- sum(out_getResults$y_1 * out_getResults$x_a)
+  unexposed_events <- sum(out_getResults$y_1 * (1 - out_getResults$x_a))
 
   text_values <- list(
-    exposure_text           = paste(exposure, "( ref =", estimand$exposure.reference, ")"),
-    effect_text             = paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point, "( ref =", estimand$exposure.reference, ")"),
-    event_summary           = sum(objget_results$y_1),
-    event_summary_exposed   = summary_text(exposed_events, sum(objget_results$x_a), TRUE),
-    event_summary_unexposed = summary_text(unexposed_events, length(objget_results$y_1) - sum(objget_results$x_a), FALSE),
-    median_followup         = paste(median(objget_results$t), "[", min(objget_results$t), ",", max(objget_results$t), "]")
+    exposure_text           = paste(exposure, "( ref =", estimand$code.exposure.ref, ")"),
+    effect_text             = paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point, "( ref =", estimand$code.exposure.ref, ")"),
+    event_summary           = sum(out_getResults$y_1),
+    event_summary_exposed   = summary_text(exposed_events, sum(out_getResults$x_a), TRUE),
+    event_summary_unexposed = summary_text(unexposed_events, length(out_getResults$y_1) - sum(out_getResults$x_a), FALSE),
+    median_followup         = paste(median(out_getResults$t), "[", min(out_getResults$t), ",", max(out_getResults$t), "]")
   )
 
   tidy_df <- function(coef, text) {
@@ -124,7 +124,7 @@ reportSurvival <- function(nuisance.model, exposure, estimand, alpha_beta_estima
     )
   }
 
-  get_message <- function() {
+  getMessage <- function() {
     if (outer.optim.method %in% c("nleqslv", "Newton", "Broyden", "partial")) return(sol$message)
     if (outer.optim.method %in% c("optim", "BFGS", "SANN")) return(ifelse(!is.null(sol$message), sol$message, "None"))
     return("-")
@@ -137,7 +137,7 @@ reportSurvival <- function(nuisance.model, exposure, estimand, alpha_beta_estima
     n.events.unexposed = text_values$event_summary_unexposed,
     median.follow.up = text_values$median_followup,
     n.parameters = length(alpha_beta_estimated[1:i_parameter[3]]),
-    optimization.message = get_message()
+    optimization.message = getMessage()
   )
 
   tg1 <- list(tidy = tidy_df(coef1, text_values$exposure_text), glance = glance_df)
@@ -149,10 +149,10 @@ reportSurvival <- function(nuisance.model, exposure, estimand, alpha_beta_estima
 
 
 reportCompetingRiskFull <- function(nuisance.model, exposure, estimand, alpha_beta_estimated, cov_estimated,
-                                     objget_results, iteration, param_diff, sol, conf.level, outer.optim.method) {
+                                     out_getResults, iteration, param_diff, sol, conf.level, outer.optim.method) {
   alpha <- 1 - conf.level
   critical_value <- qnorm(1 - alpha / 2)
-  i_parameter <- objget_results$i_parameter
+  i_parameter <- out_getResults$i_parameter
 
   coef_1 <- alpha_beta_estimated[1:i_parameter[3]]
   coef_2 <- alpha_beta_estimated[i_parameter[4]:i_parameter[7]]
@@ -167,13 +167,13 @@ reportCompetingRiskFull <- function(nuisance.model, exposure, estimand, alpha_be
   coef_p_1 <- 2 * (1 - pnorm(coef_z_1))
   coef_p_2 <- 2 * (1 - pnorm(coef_z_2))
 
-  t <- objget_results$t
-  y_0_ <- objget_results$y_0_
-  y_1_ <- objget_results$y_1_
-  y_2_ <- objget_results$y_2_
-  y_0 <- objget_results$y_0
-  y_1 <- objget_results$y_1
-  y_2 <- objget_results$y_2
+  t <- out_getResults$t
+  y_0_ <- out_getResults$y_0_
+  y_1_ <- out_getResults$y_1_
+  y_2_ <- out_getResults$y_2_
+  y_0 <- out_getResults$y_0
+  y_1 <- out_getResults$y_1
+  y_2 <- out_getResults$y_2
 
   effect.modifier <- NULL
   if (!is.null(effect.modifier)) {
@@ -181,8 +181,8 @@ reportCompetingRiskFull <- function(nuisance.model, exposure, estimand, alpha_be
   } else {
     text1 <- c("Intercept", attr(terms(nuisance.model), "term.labels"), exposure)
   }
-  text2 <- paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point, "( ref =", estimand$exposure.reference, ")")
-  text3 <- paste(estimand$effect.measure2, "of", exposure, "at", estimand$time.point, "( ref =", estimand$exposure.reference, ")")
+  text2 <- paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point, "( ref =", estimand$code.exposure.ref, ")")
+  text3 <- paste(estimand$effect.measure2, "of", exposure, "at", estimand$time.point, "( ref =", estimand$code.exposure.ref, ")")
   text4 <- paste(sum(y_1), "events in", length(y_1), "observations")
   text5 <- paste(sum(y_2), "events in", length(y_2), "observations")
   text6 <- paste(median(t), "[", min(t), ",", max(t), "]")
@@ -297,10 +297,10 @@ reportCompetingRiskFull <- function(nuisance.model, exposure, estimand, alpha_be
 }
 
 reportSurvivalFull <- function(nuisance.model, exposure, estimand, alpha_beta_estimated, cov_estimated,
-                               objget_results, iteration, param_diff, sol, conf.level, outer.optim.method) {
+                               out_getResults, iteration, param_diff, sol, conf.level, outer.optim.method) {
   alpha <- 1 - conf.level
   critical_value <- qnorm(1 - alpha / 2)
-  i_parameter <- objget_results$i_parameter
+  i_parameter <- out_getResults$i_parameter
 
   coef_1 <- alpha_beta_estimated[1:i_parameter[3]]
   coef_se_1 <- sqrt(diag(cov_estimated)[1:i_parameter[3]])
@@ -309,18 +309,18 @@ reportSurvivalFull <- function(nuisance.model, exposure, estimand, alpha_beta_es
   coef_z_1 <- abs(alpha_beta_estimated[1:i_parameter[3]]) / coef_se_1
   coef_p_1 <- 2 * (1 - pnorm(coef_z_1))
 
-  t <- objget_results$t
-  y_0_ <- objget_results$y_0_
-  y_1_ <- objget_results$y_1_
-  y_0 <- objget_results$y_0
-  y_1 <- objget_results$y_1
+  t <- out_getResults$t
+  y_0_ <- out_getResults$y_0_
+  y_1_ <- out_getResults$y_1_
+  y_0 <- out_getResults$y_0
+  y_1 <- out_getResults$y_1
   effect.modifier <- NULL
   if (!is.null(effect.modifier)) {
     text1 <- c("Intercept", attr(terms(nuisance.model), "term.labels"), exposure, "Interaction")
   } else {
     text1 <- c("Intercept", attr(terms(nuisance.model), "term.labels"), exposure)
   }
-  text2 <- paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point, "( ref =", estimand$exposure.reference, ")")
+  text2 <- paste(estimand$effect.measure1, "of", exposure, "at", estimand$time.point, "( ref =", estimand$code.exposure.ref, ")")
   text4 <- paste(sum(y_1), "events in", length(y_1), "observations")
   text6 <- paste(median(t), "[", min(t), ",", max(t), "]")
 
@@ -427,7 +427,7 @@ reportPrediction <- function(formula,
   }
 
   a_ <- as.factor(data[[exposure]])
-  if (estimand$exposure.reference==0) {
+  if (estimand$code.exposure.ref==0) {
     x_a <- as.matrix(model.matrix(~ a_)[, -1])
   } else {
     x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])

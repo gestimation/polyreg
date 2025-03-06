@@ -177,7 +177,6 @@ calculateCov <- function(objget_results, estimand, prob.bound)
     colnames(influence.function) <- c("intercept", paste("covariate", 1:(ncol(influence.function)/2 - 2), sep = ""), "exposure",
                                       "intercept", paste("covariate", 1:(ncol(influence.function)/2 - 2), sep = ""), "exposure")
   }
-  print(colnames(influence.function))
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 
