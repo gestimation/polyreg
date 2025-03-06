@@ -28,13 +28,7 @@ pak::pak("gestimation/polyreg")
 
 ## Usage
 
-Direct polynomial regression can model multiple competing events jointly
-and estimates multipilcative effects on cumulative probabilities (or a
-risk when there is only one type of event, that is, survival data) from
-competing risk data (or survival data) under right-censoring. The models
-assumed in polyreg are specified by (1) nuisance.model, (2) exposure,
-effect measures, and the time point of interest and (3) strata for
-adjustment for dependent censoring.
+Direct polynomial regression can model multiple competing events jointly and estimates multipilcative effects on cumulative probabilities (or a risk when there is only one type of event, that is, survival data) from competing risk data (or survival data) under right-censoring. The models assumed in polyreg are specified by (1) nuisance.model, (2) exposure, effect measures, and the time point of interest and (3) strata for adjustment for dependent censoring.
 
 1)  nuisance.model specifies the model formula for the nuisance model
     that represents the relationship between outcome and covariates
@@ -62,16 +56,11 @@ adjustment for dependent censoring.
     stratified Kaplan-Meier estimator, otherwise weights based on the
     Kaplan-Meier estimator are calculated.
 
-The output of polyreg is a list of coefficient, cov,
-diagnosis.statistics, summary and summary.full. We recommend using
-summary or summary.full to display the results of the analysis. The
+The output of polyreg is a list of coefficient, cov, diagnosis.statistics, summary and summary.full. We recommend using summary or summary.full to display the results of the analysis. The
 regression coefficients and their variance-covariance matrix are also
 provided as coefficient and cov, respectively, with the first element
 corresponding to the intercept term, subsequent elements to the
-covariates in nuisance.model, and the last element to exposure. Finally,
-diagnosis.statistics is a dataset containing inverse probability
-weights, influence functions, and predicted values of the potential
-outcomes of individual observations.
+covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
 
 ## Example
 
@@ -85,7 +74,6 @@ library(polyreg)
 data(diabetes.complications)
 output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1', data = diabetes.complications,
           effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
-#> [1] "intercept" "exposure"  "intercept" "exposure"
 print(output$coefficient)
 #> [1] -1.38313105  0.30043925 -3.99147261  0.07582589
 print(output$cov)
@@ -110,9 +98,9 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 
 <table style="width:99%;">
 <colgroup>
-<col style="width: 29%" />
+<col style="width: 28%" />
 <col style="width: 35%" />
-<col style="width: 34%" />
+<col style="width: 35%" />
 </colgroup>
 <thead>
 <tr class="header">
@@ -144,8 +132,8 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="odd">
 <td>effect.measure</td>
-<td>RR of fruitq1 at 8 ( ref = )</td>
-<td>RR of fruitq1 at 8 ( ref = )</td>
+<td>RR of fruitq1 at 8 ( ref = 0 )</td>
+<td>RR of fruitq1 at 8 ( ref = 0 )</td>
 </tr>
 <tr class="even">
 <td>n.events</td>
@@ -213,9 +201,9 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 
 |                      | event 1 (no competing risk)              |
 |----------------------|------------------------------------------|
-| fruitq1 ( ref = )    | 1.366                                    |
+| fruitq1 ( ref = 0 )  | 1.366                                    |
 |                      | \[1.154, 1.617\]                         |
-| effect.measure       | RR of fruitq1 at 8 ( ref = )             |
+| effect.measure       | RR of fruitq1 at 8 ( ref = 0 )           |
 | n.events             | 358                                      |
 | n.events.exposed     | 113 events in 258 exposed observations   |
 | n.events.unexposed   | 245 events in 720 unexposed observations |
@@ -237,13 +225,6 @@ output <- polyreg(nuisance.model = Event(t,epsilon) ~ age+sex+bmi+hba1c+diabetes
           exposure = 'fruitq1', strata='strata', data=diabetes.complications,
           effect.measure1='RR', time.point=8, outcome.type='COMPETINGRISK',
           data.initial.values=data.initial.values)
-#>  [1] "intercept"   "covariate1"  "covariate2"  "covariate3"  "covariate4" 
-#>  [6] "covariate5"  "covariate6"  "covariate7"  "covariate8"  "covariate9" 
-#> [11] "covariate10" "covariate11" "covariate12" "covariate13" "covariate14"
-#> [16] "exposure"    "intercept"   "covariate1"  "covariate2"  "covariate3" 
-#> [21] "covariate4"  "covariate5"  "covariate6"  "covariate7"  "covariate8" 
-#> [26] "covariate9"  "covariate10" "covariate11" "covariate12" "covariate13"
-#> [31] "covariate14" "exposure"
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
@@ -262,7 +243,7 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 </thead>
 <tbody>
 <tr class="odd">
-<td>fruitq1 ( ref = )</td>
+<td>fruitq1 ( ref = 0 )</td>
 <td>1.557</td>
 <td>0.913</td>
 </tr>
