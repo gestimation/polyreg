@@ -342,12 +342,10 @@ sortByCovariate <- function(formula, data, should.sort.data, n_covariate) {
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   if (requireNamespace("mets", quietly = TRUE)
       & requireNamespace("nleqslv", quietly = TRUE)
-      & requireNamespace("boot", quietly = TRUE)
-      & requireNamespace("modelsummary", quietly = TRUE)) {
+      & requireNamespace("boot", quietly = TRUE)) {
     suppressWarnings(library(mets))
     suppressWarnings(library(nleqslv))
     suppressWarnings(library(boot))
-    suppressWarnings(library(modelsummary))
   } else {
     stop("Required packages 'mets' and/or 'nleqslv' are not installed.")
   }

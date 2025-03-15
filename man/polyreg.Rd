@@ -18,6 +18,12 @@ polyreg(
   time.point = NULL,
   outcome.type = "COMPETINGRISK",
   conf.level = 0.95,
+  report.nuisance.parameter = FALSE,
+  report.optim.convergence = FALSE,
+  report.boot.conf = FALSE,
+  boot.bca = TRUE,
+  boot.parameter1 = 200,
+  boot.parameter2 = 46,
   outer.optim.method = "nleqslv",
   inner.optim.method = "optim",
   optim.parameter1 = 1e-05,
@@ -30,10 +36,7 @@ polyreg(
   data.initial.values = NULL,
   should.normalize.covariate = TRUE,
   should.sort.data = TRUE,
-  prob.bound = 1e-05,
-  boot.bca = TRUE,
-  boot.parameter1 = 200,
-  boot.parameter2 = 46
+  prob.bound = 1e-05
 )
 }
 \arguments{
@@ -63,6 +66,18 @@ polyreg(
 
 \item{conf.level}{numeric The level for confidence intervals.}
 
+\item{report.nuisance.parameter}{logical Reports estimates and other statistics of nuisance parameters. Defaults to FALSE.}
+
+\item{report.optim.convergence}{logical Reports indicators of convergence of parameter estimation. Defaults to FALSE.}
+
+\item{report.boot.conf}{logical Specifies the use of bootstrap confidence intervals. Defaults to FALSE.}
+
+\item{boot.bca}{logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).}
+
+\item{boot.parameter1}{integer Number of replicatations for bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
+
+\item{boot.parameter2}{numeric Seed used in bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
+
 \item{outer.optim.method}{character Specifies the method of optimization (nleqslv, optim, multiroot).}
 
 \item{inner.optim.method}{character Specifies the method of optimization (nleqslv, optim, multiroot).}
@@ -86,12 +101,6 @@ polyreg(
 \item{should.sort.data}{logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.}
 
 \item{prob.bound}{numeric Small threshold for clamping probabilities. Defaults to 1e-5.}
-
-\item{boot.bca}{character Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal appriximation).}
-
-\item{boot.parameter1}{numeric Reprecation for bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
-
-\item{boot.parameter2}{numeric Seed used in bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
 
 \item{data.initlal.values}{data.frame Optional dataset containing initial values. Defaults to NULL.}
 }

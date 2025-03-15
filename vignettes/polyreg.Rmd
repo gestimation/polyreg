@@ -32,38 +32,38 @@ The polyreg package implements direct polynomial regression, a model that estima
 
 The models in polyreg are specified by three main components:
 
-Nuisance model: Describes the relationship between outcomes and covariates (excluding exposure).
+(1)Nuisance model: Describes the relationship between outcomes and covariates (excluding exposure).
 
-Effect measures and time points: Defines the exposure effect to be estimated and the time point of interest.
+(2)Effect measures and time points: Defines the exposure effect to be estimated and the time point of interest.
 
-Censoring adjustment: Specifies strata for inverse probability weighting to adjust for dependent censoring.
+(3)Censoring adjustment: Specifies strata for inverse probability weighting to adjust for dependent censoring.
 
 ## Model specification
 ### 1. Nuisance Model
 
 The nuisance.model argument specifies the formula linking the outcome to covariates. Its format depends on the outcome type:
 
-Competing risks or survival outcome: Use Surv() or Event() with time and status variables. 
+(1)Competing risks or survival outcome: Use Surv() or Event() with time and status variables. 
 
-Binomial outcome: Use standard R formula notation.
+(2)Binomial outcome: Use standard R formula notation.
 
 Default event codes:
 
-Competing risks outcome: 1 and 2 for event types, 0 for censored observations.
+(1)Competing risks outcome: 1 and 2 for event types, 0 for censored observations.
 
-Survival outcome: 1 for events, 0 for censored observations.
+(2)Survival outcome: 1 for events, 0 for censored observations.
 
-Binomial outcome: 0 and 1.
+(3)Binomial outcome: 0 and 1.
 
 Event codes can be customized using code.event1, code.event2, and code.censoring. The outcome.type argument must be set to:
 
-Effects on cumulative incidence probabilities at a specific time: 'COMPETINGRISK'
+(1)Effects on cumulative incidence probabilities at a specific time: 'COMPETINGRISK'
 
-Effects on a risk at a specific time: 'SURVIVAL'
+(2)Effects on a risk at a specific time: 'SURVIVAL'
 
-Effects on a risk of a binomial outcome: 'BINOMIAL'
+(3)Effects on a risk of a binomial outcome: 'BINOMIAL'
 
-Common effects on cumulative incidence probabilities over time: 'PROPORTIONAL'
+(4)Common effects on cumulative incidence probabilities over time: 'PROPORTIONAL'
 
 Covariates included in nuisance.model should adjust for confounding factors to obtain unbiased exposure effect estimates. 
 
@@ -71,11 +71,11 @@ Covariates included in nuisance.model should adjust for confounding factors to o
 
 Three effect measures available:
 
-Risk Ratio (RR)
+(1)Risk Ratio (RR)
 
-Odds Ratio (OR)
+(2)Odds Ratio (OR)
 
-Sub-distribution Hazard Ratio (SHR)
+(3)Sub-distribution Hazard Ratio (SHR)
 
 Set the desired measure using effect.measure1 and, for competing risks analysis, effect.measure2. The time.point argument specifies the follow-up time at which effects are estimated. 
 
@@ -83,22 +83,19 @@ Set the desired measure using effect.measure1 and, for competing risks analysis,
 
 Inverse probability weights adjust for dependent censoring. Use the strata argument to specify stratification variables. If no strata are specified, Kaplan-Meier weights are used. 
 
-
 ## Output
 
 The main components of the output list include:
 
-coefficient: Regression coefficients
+(1)coefficient: Regression coefficients
 
-cov: Variance-covariance matrix
+(2)cov: Variance-covariance matrix
 
-diagnosis.statistics: Inverse probability weights, influence functions, and predicted values 
+(3)diagnosis.statistics: Inverse probability weights, influence functions, and predicted values
 
-summary: Summary of exposure effect estimates
+(4)summary: Summary of estimated exposure effects
 
-summary.full: Detailed summary including all regression coefficients
-
-Use the summary or summary.full output with msummary() to display formatted results. The regression coefficients and their variance-covariance matrix are provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
+Use the summary output with msummary() to display formatted results. The regression coefficients and their variance-covariance matrix are provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
 
 ## Example 1. Unadjusted competing risks analysis
 
@@ -108,15 +105,15 @@ For the initial illustration, unadjusted analysis focusing on cumulative inciden
 library(polyreg)
 data(diabetes.complications)
 output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1', data = diabetes.complications,
-          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C', report.nuisance.parameter = TRUE)
 print(output$coefficient)
 print(output$cov)
 ```
 
-The summaries of analysis results in the list of outputs (e.g. output$summary.full below) are in accordance with the format of model summary function. All regression coefficients above are included in summary.full and model summary may be used to converted to risk ratios, odds ratios or sub-distribution hazards ratios by selecting exponentiate=TRUE option. The summaries can be displayed in Viewer with customized statistics such as p-values or confidence intervals. 
+The summaries of analysis results in the list of outputs (e.g. output$summary below) are in accordance with the format of model summary function. All regression coefficients above are included in summary by setting report.nuisance.parameter = TRUE. Model summary may be used to converted to risk ratios, odds ratios or sub-distribution hazards ratios using exponentiate=TRUE option. The summaries can be displayed in Viewer with customized statistics such as p-values or confidence intervals. 
 
 ```{r example2}
-msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
+msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
 ## Example 2. Survival analysis

@@ -212,8 +212,8 @@ reportProportional <- function(nuisance.model,
                                param_diff,
                                sol,
                                outer.optim.method) {
-  i_parameter <- out_getResults$i_parameter
 
+  i_parameter <- out_getResults$i_parameter
   coef1 <- list(coef = out_bootstrap$boot.coef[1], coef_se = out_bootstrap$boot.coef_se[1], conf_low = out_bootstrap$boot.conf_low[1], conf_high = out_bootstrap$boot.conf_high[1], p_value = out_bootstrap$boot.p_value[1])
   coef2 <- list(coef = out_bootstrap$boot.coef[2], coef_se = out_bootstrap$boot.coef_se[2], conf_low = out_bootstrap$boot.conf_low[2], conf_high = out_bootstrap$boot.conf_high[2], p_value = out_bootstrap$boot.p_value[2])
 
@@ -247,12 +247,6 @@ reportProportional <- function(nuisance.model,
     )
   }
 
-  getMessage <- function() {
-    if (outer.optim.method %in% c("nleqslv", "Newton", "Broyden")) return(sol$message)
-    if (outer.optim.method %in% c("optim", "BFGS", "SANN")) return(ifelse(!is.null(sol$message), sol$message, "None"))
-    return("-")
-  }
-
   tg <- list(
     event1 = list(
       tidy = tidy_df(coef1, text_values$exposure_text),
@@ -261,7 +255,7 @@ reportProportional <- function(nuisance.model,
                          describeEvents(sum(out_getResults$y_1 * out_getResults$x_a), sum(out_getResults$x_a), TRUE),
                          describeEvents(sum(out_getResults$y_1 * (1 - out_getResults$x_a)), length(out_getResults$y_1) - sum(out_getResults$x_a), FALSE),
                          i_parameter[3],
-                         getMessage())
+                         getMessage(outer.optim.method, sol))
     ),
     event2 = list(
       tidy = tidy_df(coef2, text_values$exposure_text),

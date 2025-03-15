@@ -19,24 +19,14 @@ binomial outcomes, both of which use log odds products.
 
 The models in polyreg are specified by three main components:
 
-Nuisance model: Describes the relationship between outcomes and
+(1)Nuisance model: Describes the relationship between outcomes and
 covariates (excluding exposure).
 
-Effect measures and time points: Defines the exposure effect to be
+(2)Effect measures and time points: Defines the exposure effect to be
 estimated and the time point of interest.
 
-Censoring adjustment: Specifies strata for inverse probability weighting
-to adjust for dependent censoring.
-
-## Installation
-
-You can install the development version of polyreg from
-[GitHub](https://github.com/) with:
-
-``` r
-library(devtools)
-install_github("gestimation/polyreg") 
-```
+(3)Censoring adjustment: Specifies strata for inverse probability
+weighting to adjust for dependent censoring.
 
 ## Model specification
 
@@ -45,31 +35,31 @@ install_github("gestimation/polyreg")
 The nuisance.model argument specifies the formula linking the outcome to
 covariates. Its format depends on the outcome type:
 
-Competing risks or survival outcome: Use Surv() or Event() with time and
-status variables.
+(1)Competing risks or survival outcome: Use Surv() or Event() with time
+and status variables.
 
-Binomial outcome: Use standard R formula notation.
+(2)Binomial outcome: Use standard R formula notation.
 
 Default event codes:
 
-Competing risks outcome: 1 and 2 for event types, 0 for censored
+(1)Competing risks outcome: 1 and 2 for event types, 0 for censored
 observations.
 
-Survival outcome: 1 for events, 0 for censored observations.
+(2)Survival outcome: 1 for events, 0 for censored observations.
 
-Binomial outcome: 0 and 1.
+(3)Binomial outcome: 0 and 1.
 
 Event codes can be customized using code.event1, code.event2, and
 code.censoring. The outcome.type argument must be set to:
 
-Effects on cumulative incidence probabilities at a specific time:
+(1)Effects on cumulative incidence probabilities at a specific time:
 ‘COMPETINGRISK’
 
-Effects on a risk at a specific time: ‘SURVIVAL’
+(2)Effects on a risk at a specific time: ‘SURVIVAL’
 
-Effects on a risk of a binomial outcome: ‘BINOMIAL’
+(3)Effects on a risk of a binomial outcome: ‘BINOMIAL’
 
-Common effects on cumulative incidence probabilities over time:
+(4)Common effects on cumulative incidence probabilities over time:
 ‘PROPORTIONAL’
 
 Covariates included in nuisance.model should adjust for confounding
@@ -79,11 +69,11 @@ factors to obtain unbiased exposure effect estimates.
 
 Three effect measures available:
 
-Risk Ratio (RR)
+(1)Risk Ratio (RR)
 
-Odds Ratio (OR)
+(2)Odds Ratio (OR)
 
-Sub-distribution Hazard Ratio (SHR)
+(3)Sub-distribution Hazard Ratio (SHR)
 
 Set the desired measure using effect.measure1 and, for competing risks
 analysis, effect.measure2. The time.point argument specifies the
@@ -99,25 +89,23 @@ specified, Kaplan-Meier weights are used.
 
 The main components of the output list include:
 
-coefficient: Regression coefficients
+(1)coefficient: Regression coefficients
 
-cov: Variance-covariance matrix
+(2)cov: Variance-covariance matrix
 
-diagnosis.statistics: Inverse probability weights, influence functions,
-and predicted values
+(3)diagnosis.statistics: Inverse probability weights, influence
+functions, and predicted values
 
-summary: Summary of exposure effect estimates
+(4)summary: Summary of estimated exposure effects
 
-summary.full: Detailed summary including all regression coefficients
-
-Use the summary or summary.full output with msummary() to display
-formatted results. The regression coefficients and their
-variance-covariance matrix are provided as coefficient and cov,
-respectively, with the first element corresponding to the intercept
-term, subsequent elements to the covariates in nuisance.model, and the
-last element to exposure. Finally, diagnosis.statistics is a dataset
-containing inverse probability weights, influence functions, and
-predicted values of the potential outcomes of individual observations.
+Use the summary output with msummary() to display formatted results. The
+regression coefficients and their variance-covariance matrix are
+provided as coefficient and cov, respectively, with the first element
+corresponding to the intercept term, subsequent elements to the
+covariates in nuisance.model, and the last element to exposure. Finally,
+diagnosis.statistics is a dataset containing inverse probability
+weights, influence functions, and predicted values of the potential
+outcomes of individual observations.
 
 ## Example 1. Unadjusted competing risks analysis
 
@@ -131,7 +119,12 @@ polytomous regression are presented.
 library(polyreg)
 data(diabetes.complications)
 output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1', data = diabetes.complications,
-          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C', report.nuisance.parameter = TRUE)
+#> 
+#> Attaching package: 'boot'
+#> The following object is masked from 'package:survival':
+#> 
+#>     aml
 print(output$coefficient)
 #> [1] -1.38313105  0.30043925 -3.99147261  0.07582589
 print(output$cov)
@@ -143,28 +136,29 @@ print(output$cov)
 ```
 
 The summaries of analysis results in the list of outputs
-(e.g. output\$summary.full below) are in accordance with the format of
-model summary function. All regression coefficients above are included
-in summary.full and model summary may be used to converted to risk
-ratios, odds ratios or sub-distribution hazards ratios by selecting
-exponentiate=TRUE option. The summaries can be displayed in Viewer with
-customized statistics such as p-values or confidence intervals.
+(e.g. output\$summary below) are in accordance with the format of model
+summary function. All regression coefficients above are included in
+summary by setting report.nuisance.parameter = TRUE. Model summary may
+be used to converted to risk ratios, odds ratios or sub-distribution
+hazards ratios using exponentiate=TRUE option. The summaries can be
+displayed in Viewer with customized statistics such as p-values or
+confidence intervals.
 
 ``` r
-msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
+msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
 <table style="width:99%;">
 <colgroup>
-<col style="width: 28%" />
-<col style="width: 35%" />
-<col style="width: 35%" />
+<col style="width: 21%" />
+<col style="width: 39%" />
+<col style="width: 38%" />
 </colgroup>
 <thead>
 <tr class="header">
 <th></th>
-<th>event 1</th>
-<th>event 2</th>
+<th>event1</th>
+<th>event2</th>
 </tr>
 </thead>
 <tbody>
@@ -179,7 +173,7 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 <td>[0.014, 0.025]</td>
 </tr>
 <tr class="odd">
-<td>fruitq1</td>
+<td>fruitq1 ( ref = 0 )</td>
 <td>1.350</td>
 <td>1.079</td>
 </tr>
@@ -195,8 +189,18 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="even">
 <td>n.events</td>
-<td>279 events in 978 observations</td>
-<td>79 events in 978 observations</td>
+<td>279</td>
+<td>79</td>
+</tr>
+<tr class="odd">
+<td>n.events.exposed</td>
+<td>91 events in 258 exposed observations</td>
+<td>22 events in 258 exposed observations</td>
+</tr>
+<tr class="even">
+<td>n.events.unexposed</td>
+<td>188 events in 720 unexposed observations</td>
+<td>57 events in 720 unexposed observations</td>
 </tr>
 <tr class="odd">
 <td>median.follow.up</td>
@@ -204,25 +208,9 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 <td>8 [ 0.05 , 11 ]</td>
 </tr>
 <tr class="even">
-<td>n.loop.iteration</td>
+<td>n.parameters</td>
 <td>2</td>
-<td><ul>
-<li></li>
-</ul></td>
-</tr>
-<tr class="odd">
-<td>n.optimization.iteration</td>
-<td>0</td>
-<td><ul>
-<li></li>
-</ul></td>
-</tr>
-<tr class="even">
-<td>max.function.value</td>
-<td>1.50821400358489e-11</td>
-<td><ul>
-<li></li>
-</ul></td>
+<td>2</td>
 </tr>
 <tr class="odd">
 <td>optimization.message</td>
@@ -268,7 +256,7 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 | n.events.exposed     | 113 events in 258 exposed observations   |
 | n.events.unexposed   | 245 events in 720 unexposed observations |
 | median.follow.up     | 8 \[ 0.05 , 11 \]                        |
-| n.parameters         | 16                                       |
+| n.parameters         | 2                                        |
 | optimization.message | Function criterion near zero             |
 
 ## Example 3. Binomial analysis
@@ -285,15 +273,16 @@ output <- polyreg(nuisance.model = d ~ age+sex+bmi+hba1c+diabetes_duration
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```
 
-|                      | event 1 (binomial outcome)               |
+|                      | event 1 (no competing risk)              |
 |----------------------|------------------------------------------|
 | fruitq1 ( ref = 0 )  | 1.362                                    |
 |                      | \[1.152, 1.611\]                         |
-| effect.measure       | RR of fruitq1                            |
+| effect.measure       | RR of fruitq1 ( ref = 0 )                |
 | n.events             | 362                                      |
 | n.events.exposed     | 114 events in 258 exposed observations   |
 | n.events.unexposed   | 248 events in 720 unexposed observations |
-| n.parameters         | 16                                       |
+| median.follow.up     | 0 \[ 0 , 0 \]                            |
+| n.parameters         | 2                                        |
 | optimization.message | Function criterion near zero             |
 
 ## Example 4. Competing risks analysis
@@ -331,18 +320,18 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 <tbody>
 <tr class="odd">
 <td>fruitq1 ( ref = 0 )</td>
-<td>1.558</td>
+<td>1.557</td>
 <td>0.913</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[1.311, 1.851]</td>
-<td>[0.461, 1.806]</td>
+<td>[1.311, 1.850]</td>
+<td>[0.461, 1.805]</td>
 </tr>
 <tr class="odd">
 <td>effect.measure</td>
-<td>RR of fruitq1 at 8</td>
-<td>RR of fruitq1 at 8</td>
+<td>RR of fruitq1 at 8 ( ref = 0 )</td>
+<td>RR of fruitq1 at 8 ( ref = 0 )</td>
 </tr>
 <tr class="even">
 <td>n.events</td>
@@ -366,8 +355,8 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="even">
 <td>n.parameters</td>
-<td>16</td>
-<td>16</td>
+<td>3</td>
+<td>3</td>
 </tr>
 <tr class="odd">
 <td>optimization.message</td>

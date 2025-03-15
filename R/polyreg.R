@@ -36,7 +36,6 @@
 #' @importFrom survival Surv
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
-#' @importFrom modelsummary modelsummary msummary
 #'
 #' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
 #' @export
@@ -414,14 +413,12 @@ polyreg <- function(
   #######################################################################################################
   # 6. Calculating bootstrap confidence interval (functions: boot, solveEstimatingEquationP)
   #######################################################################################################
-  if (outcome.type=='PROPORTIONAL') {
-    boot.coef     <- rep(NA,2)
-    boot.coef_se  <- rep(NA,2)
-    boot.p_value  <- rep(NA,2)
-    boot.conf_low <- rep(NA,2)
-    boot.conf_high<- rep(NA,2)
-    index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
-  }
+  boot.coef     <- rep(NA,2)
+  boot.coef_se  <- rep(NA,2)
+  boot.p_value  <- rep(NA,2)
+  boot.conf_low <- rep(NA,2)
+  boot.conf_high<- rep(NA,2)
+  index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
 
   if (outcome.type=='PROPORTIONAL') {
     set.seed(boot.parameter2)
