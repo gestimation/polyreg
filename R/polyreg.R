@@ -1,6 +1,6 @@
 #' @title Direct polynomial regression for survival and competing risks analysis
 #'
-#' @param nuisance.model formula Model formula representing outcome, exposure and covariates
+#' @param nuisance.model formula Model formula representing outcome and covariates other than exposure
 #' @param exposure character Column name representing the binary exposure variable.
 #' @param strata character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL.
 #' @param data data.frame Input dataset containing the outcome, the exposure and covariates.
@@ -13,31 +13,31 @@
 #' @param time.point numeric The time point for exposure effects to be estimated.
 #' @param outcome.type character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).
 #' @param conf.level numeric The level for confidence intervals.
-#' @param report.nuisance.parameter logical Reports estimates and other statistics of nuisance parameters. Defaults to FALSE.
-#' @param report.optim.convergence logical Reports indicators of convergence of parameter estimation. Defaults to FALSE.
-#' @param report.boot.conf logical Specifies the use of bootstrap confidence intervals. Defaults to FALSE.
+#' @param report.nuisance.parameter logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.
+#' @param report.optim.convergence logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.
+#' @param report.boot.conf logical Specifies contents of return. (TRUE = report bootstrap confidence intervals, FALSE = otherwise). Defaults to FALSE.
 #' @param boot.bca logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).
-#' @param boot.parameter1 integer Number of replicatations for bootstrap confidence intervals when outcome.type==PROPORTIONAL.
-#' @param boot.parameter2 numeric Seed used in bootstrap confidence intervals when outcome.type==PROPORTIONAL.
-#' @param outer.optim.method character Specifies the method of optimization (nleqslv, optim, multiroot).
-#' @param inner.optim.method character Specifies the method of optimization (nleqslv, optim, multiroot).
-#' @param optim.parameter1 numeric Convergence threshold for outer loop. Defaults to 1e-5.
+#' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals.
+#' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
+#' @param outer.optim.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
+#' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
+#' @param optim.parameter1 numeric A threshold for initial value search in outer loop. Defaults to 1e-5.
 #' @param optim.parameter2 integer Maximum number of iterations. Defaults to 20.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
-#' @param optim.parameter4 numeric Convergence threshold for optim in outer loop. Defaults to 1e-5.
+#' @param optim.parameter4 numeric A threshold for determining convergencein outer loop. Defaults to 1e-5.
 #' @param optim.parameter5 integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.
-#' @param optim.parameter6 numeric Convergence threshold for optim in inner loop. Defaults to 1e-10.
+#' @param optim.parameter6 numeric A threshold for determining convergence in inner loop. Defaults to 1e-10.
 #' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
-#' @param data.initlal.values data.frame Optional dataset containing initial values. Defaults to NULL.
+#' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
 #' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
-#' @param prob.bound numeric Small threshold for clamping probabilities. Defaults to 1e-5.
+#' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
 #' @importFrom mets phreg Event
 #' @importFrom survival Surv
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
 #'
-#' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
+#' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary meets requirement of msummary function. diagnosis.statistics in includes inverse probability weights, influence functions, and predicted potential outcomes
 #' @export
 #'
 #' @examples

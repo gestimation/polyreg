@@ -40,7 +40,7 @@ polyreg(
 )
 }
 \arguments{
-\item{nuisance.model}{formula Model formula representing outcome, exposure and covariates}
+\item{nuisance.model}{formula Model formula representing outcome and covariates other than exposure}
 
 \item{exposure}{character Column name representing the binary exposure variable.}
 
@@ -66,33 +66,33 @@ polyreg(
 
 \item{conf.level}{numeric The level for confidence intervals.}
 
-\item{report.nuisance.parameter}{logical Reports estimates and other statistics of nuisance parameters. Defaults to FALSE.}
+\item{report.nuisance.parameter}{logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.}
 
-\item{report.optim.convergence}{logical Reports indicators of convergence of parameter estimation. Defaults to FALSE.}
+\item{report.optim.convergence}{logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.}
 
-\item{report.boot.conf}{logical Specifies the use of bootstrap confidence intervals. Defaults to FALSE.}
+\item{report.boot.conf}{logical Specifies contents of return. (TRUE = report bootstrap confidence intervals, FALSE = otherwise). Defaults to FALSE.}
 
 \item{boot.bca}{logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).}
 
-\item{boot.parameter1}{integer Number of replicatations for bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
+\item{boot.parameter1}{integer Number of replications for bootstrap confidence intervals.}
 
-\item{boot.parameter2}{numeric Seed used in bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
+\item{boot.parameter2}{numeric Seed used for bootstrap confidence intervals.}
 
-\item{outer.optim.method}{character Specifies the method of optimization (nleqslv, optim, multiroot).}
+\item{outer.optim.method}{character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).}
 
-\item{inner.optim.method}{character Specifies the method of optimization (nleqslv, optim, multiroot).}
+\item{inner.optim.method}{character Specifies the method of optimization (optim, BFGS, SANN).}
 
-\item{optim.parameter1}{numeric Convergence threshold for outer loop. Defaults to 1e-5.}
+\item{optim.parameter1}{numeric A threshold for initial value search in outer loop. Defaults to 1e-5.}
 
 \item{optim.parameter2}{integer Maximum number of iterations. Defaults to 20.}
 
 \item{optim.parameter3}{numeric Constraint range for parameters. Defaults to 100.}
 
-\item{optim.parameter4}{numeric Convergence threshold for optim in outer loop. Defaults to 1e-5.}
+\item{optim.parameter4}{numeric A threshold for determining convergencein outer loop. Defaults to 1e-5.}
 
 \item{optim.parameter5}{integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.}
 
-\item{optim.parameter6}{numeric Convergence threshold for optim in inner loop. Defaults to 1e-10.}
+\item{optim.parameter6}{numeric A threshold for determining convergence in inner loop. Defaults to 1e-10.}
 
 \item{optim.parameter7}{integer Maximum number of iterations for optim in inner loop. Defaults to 200.}
 
@@ -100,12 +100,12 @@ polyreg(
 
 \item{should.sort.data}{logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.}
 
-\item{prob.bound}{numeric Small threshold for clamping probabilities. Defaults to 1e-5.}
+\item{prob.bound}{numeric A threshold for clamping probabilities. Defaults to 1e-5.}
 
-\item{data.initlal.values}{data.frame Optional dataset containing initial values. Defaults to NULL.}
+\item{data.initlal.values}{data.frame A dataset containing initial values. Defaults to NULL.}
 }
 \value{
-A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary and summary.full meets requirement of msummary function.
+A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary meets requirement of msummary function. diagnosis.statistics in includes inverse probability weights, influence functions, and predicted potential outcomes
 }
 \description{
 Direct polynomial regression for survival and competing risks analysis

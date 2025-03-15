@@ -94,7 +94,7 @@ The main components of the output list include:
 (2)cov: Variance-covariance matrix
 
 (3)diagnosis.statistics: Inverse probability weights, influence
-functions, and predicted values
+functions, and predicted potential outcomes
 
 (4)summary: Summary of estimated exposure effects
 
