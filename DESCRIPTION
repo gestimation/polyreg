@@ -4,7 +4,7 @@ Version: 0.1.1
 Maintainer: ST <gestimation@gmail.com>
 Authors@R: 
     person("S", "T", , "gestimation@gmail.com", role = c("aut", "cre"))
-Description: Direct polytomous regression is a competing risks model that can jointly analyze multiple competing events and estimates estimate multiplicative effects of a binary exposure. This model naturally enforces a sum restriction to cumulative incidence probabilities by reparameterizing nuisance parameters using polytomous log odds products. Risk ratios, odds ratios or sub-distribution hazard ratios for each of competing events are estimated by stratified inverse probability of censoring weighted estimators under adjustment for covariates in the nuisance and censoring models. 
+Description: Direct polytomous regression is a competing risks model that jointly analyzes multiple competing events and estimates estimate multiplicative effects of a binary exposure. This model naturally enforces a sum restriction to cumulative incidence probabilities by reparameterizing nuisance parameters using polytomous log odds products. Risk ratios, odds ratios or sub-distribution hazard ratios for each of competing events are estimated by stratified inverse probability of censoring weighted estimators under adjustment for covariates in the nuisance and censoring models. Richardson model for binomial regression that uses a log odds product is also covered by this function. 
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -12,10 +12,9 @@ RoxygenNote: 7.3.2
 Suggests: 
     knitr,
     rmarkdown,
-    modelsummary,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-Imports: mets, nleqslv
+Imports: mets, nleqslv, boot, modelsummary
 VignetteBuilder: knitr
 URL: https://github.com/gestimation/polyreg
 BugReports: https://github.com/gestimation/polyreg/issues

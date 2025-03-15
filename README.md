@@ -6,15 +6,27 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-Direct polytomous regression is a competing risks model that jointly
-analyzes multiple competing events and estimates estimate multiplicative
-effects of a binary exposure. This model naturally enforces a sum
-restriction to cumulative incidence probabilities by reparameterizing
-nuisance parameters using polytomous log odds products. Risk ratios,
-odds ratios or sub-distribution hazard ratios for each of competing
-events are estimated by stratified inverse probability of censoring
-weighted estimators under adjustment for covariates in the nuisance and
-censoring models.
+The polyreg package implements direct polynomial regression, a model
+that estimates multiplicative effects (e.g., risk ratio, odds ratio, or
+sub-distribution hazard ratio) on risks, cumulative incidence
+probabilities at a specific time point, or common effects over time. A
+key feature of this model is its ability to analyze multiple competing
+events simultaneously while ensuring that the probabilities sum to one.
+This is achieved by reparameterizing nuisance parameters using
+polytomous log odds products. Additionally, the package supports direct
+binomial regression for survival outcomes and the Richardson model for
+binomial outcomes, both of which use log odds products.
+
+The models in polyreg are specified by three main components:
+
+Nuisance model: Describes the relationship between outcomes and
+covariates (excluding exposure).
+
+Effect measures and time points: Defines the exposure effect to be
+estimated and the time point of interest.
+
+Censoring adjustment: Specifies strata for inverse probability weighting
+to adjust for dependent censoring.
 
 ## Installation
 
@@ -22,52 +34,98 @@ You can install the development version of polyreg from
 [GitHub](https://github.com/) with:
 
 ``` r
-# install.packages("pak")
-pak::pak("gestimation/polyreg")
+library(devtools)
+install_github("gestimation/polyreg") 
 ```
 
-## Usage
+## Model specification
 
-Direct polynomial regression can model multiple competing events jointly and estimates multipilcative effects on cumulative probabilities (or a risk when there is only one type of event, that is, survival data) from competing risk data (or survival data) under right-censoring. The models assumed in polyreg are specified by (1) nuisance.model, (2) exposure, effect measures, and the time point of interest and (3) strata for adjustment for dependent censoring.
+### 1. Nuisance Model
 
-1)  nuisance.model specifies the model formula for the nuisance model
-    that represents the relationship between outcome and covariates
-    other than exposure, in which the outcome should be formatted as
-    type Surv or Event that should include a time variable and a status
-    variable. For competing risk data, event codes 1 and 2 are default,
-    and for survival data, event code 1 is default, with code 0
-    indicating a censored observation. The event codes are selected by
-    code.event1, code.event2, and code.censoring. Another argument
-    outcome.type selects a model suitable for the outcome type by
-    selecting COMPETINGRISK and SURVIVAL, and must be consistent with
-    the event code of the model formula. To obtain valid estimates of
-    the exposure effects, covariates in the model format should include
-    confounding factors to be adjusted for.
+The nuisance.model argument specifies the formula linking the outcome to
+covariates. Its format depends on the outcome type:
 
-2)  The effect measure options include risk ratio (RR), odds ratio (OR)
-    and sub-distribution hazard ratio (SHR), any of which can be
-    selected using effect.measure1 and effect.measure2. The time point
-    at which these multiplicative effects are estimated is also
-    specified by time.point.
+Competing risks or survival outcome: Use Surv() or Event() with time and
+status variables.
 
-3)  The model for calculating inverse probability weights to adjust for
-    censoring is specified by strata. If a stratified variable is
-    specified, dependent censoring is taken into account by the
-    stratified Kaplan-Meier estimator, otherwise weights based on the
-    Kaplan-Meier estimator are calculated.
+Binomial outcome: Use standard R formula notation.
 
-The output of polyreg is a list of coefficient, cov, diagnosis.statistics, summary and summary.full. We recommend using summary or summary.full to display the results of the analysis. The
-regression coefficients and their variance-covariance matrix are also
-provided as coefficient and cov, respectively, with the first element
-corresponding to the intercept term, subsequent elements to the
-covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
+Default event codes:
 
-## Example
+Competing risks outcome: 1 and 2 for event types, 0 for censored
+observations.
 
-The code below conducts unadjusted analysis focusing on cumulative
-incidence probabilities of event 1 and 2 at 24 years. Regression
-coefficients and variance covariance matrix of both exposure (fruitq1)
-and covariates (intercept in this case) in the models are presented.
+Survival outcome: 1 for events, 0 for censored observations.
+
+Binomial outcome: 0 and 1.
+
+Event codes can be customized using code.event1, code.event2, and
+code.censoring. The outcome.type argument must be set to:
+
+Effects on cumulative incidence probabilities at a specific time:
+‘COMPETINGRISK’
+
+Effects on a risk at a specific time: ‘SURVIVAL’
+
+Effects on a risk of a binomial outcome: ‘BINOMIAL’
+
+Common effects on cumulative incidence probabilities over time:
+‘PROPORTIONAL’
+
+Covariates included in nuisance.model should adjust for confounding
+factors to obtain unbiased exposure effect estimates.
+
+### 2. Effect measures and time points
+
+Three effect measures available:
+
+Risk Ratio (RR)
+
+Odds Ratio (OR)
+
+Sub-distribution Hazard Ratio (SHR)
+
+Set the desired measure using effect.measure1 and, for competing risks
+analysis, effect.measure2. The time.point argument specifies the
+follow-up time at which effects are estimated.
+
+### 3. Censoring adjustment
+
+Inverse probability weights adjust for dependent censoring. Use the
+strata argument to specify stratification variables. If no strata are
+specified, Kaplan-Meier weights are used.
+
+## Output
+
+The main components of the output list include:
+
+coefficient: Regression coefficients
+
+cov: Variance-covariance matrix
+
+diagnosis.statistics: Inverse probability weights, influence functions,
+and predicted values
+
+summary: Summary of exposure effect estimates
+
+summary.full: Detailed summary including all regression coefficients
+
+Use the summary or summary.full output with msummary() to display
+formatted results. The regression coefficients and their
+variance-covariance matrix are provided as coefficient and cov,
+respectively, with the first element corresponding to the intercept
+term, subsequent elements to the covariates in nuisance.model, and the
+last element to exposure. Finally, diagnosis.statistics is a dataset
+containing inverse probability weights, influence functions, and
+predicted values of the potential outcomes of individual observations.
+
+## Example 1. Unadjusted competing risks analysis
+
+For the initial illustration, unadjusted analysis focusing on cumulative
+incidence probabilities of event 1 and 2 at 8 years is demonstrated.
+Regression coefficients and variance covariance matrix of both exposure
+(fruitq1) and covariates (intercept in this case) in the fitted direct
+polytomous regression are presented.
 
 ``` r
 library(polyreg)
@@ -142,8 +200,8 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="odd">
 <td>median.follow.up</td>
-<td>7.9973 [ 0.0493 , 11.0034 ]</td>
-<td>7.9973 [ 0.0493 , 11.0034 ]</td>
+<td>8 [ 0.05 , 11 ]</td>
+<td>8 [ 0.05 , 11 ]</td>
 </tr>
 <tr class="even">
 <td>n.loop.iteration</td>
@@ -176,6 +234,8 @@ msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
 </tbody>
 </table>
 
+## Example 2. Survival analysis
+
 The second example is survival analysis (outcome.type=‘SURVIVAL’) to
 estimate the effects on the risk of diabetic retinopathy at 8 years of
 follow-up, treating macrovascular complications as censoring. 15
@@ -207,13 +267,40 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 | n.events             | 358                                      |
 | n.events.exposed     | 113 events in 258 exposed observations   |
 | n.events.unexposed   | 245 events in 720 unexposed observations |
-| median.follow.up     | 7.9973 \[ 0.0493 , 11.0034 \]            |
+| median.follow.up     | 8 \[ 0.05 , 11 \]                        |
 | n.parameters         | 16                                       |
 | optimization.message | Function criterion near zero             |
 
+## Example 3. Binomial analysis
+
+Binomial analysis is conducted if outcome.type=‘BINOMIAL’. Outcomes of
+observations censored before 8 years of follow-up are now treated as
+complication-free.
+
+``` r
+output <- polyreg(nuisance.model = d ~ age+sex+bmi+hba1c+diabetes_duration
+          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa, 
+          exposure = 'fruitq1', strata='strata', data = diabetes.complications,
+          effect.measure1='RR', time.point=8, outcome.type='BINOMIAL')
+msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
+```
+
+|                      | event 1 (binomial outcome)               |
+|----------------------|------------------------------------------|
+| fruitq1 ( ref = 0 )  | 1.362                                    |
+|                      | \[1.152, 1.611\]                         |
+| effect.measure       | RR of fruitq1                            |
+| n.events             | 362                                      |
+| n.events.exposed     | 114 events in 258 exposed observations   |
+| n.events.unexposed   | 248 events in 720 unexposed observations |
+| n.parameters         | 16                                       |
+| optimization.message | Function criterion near zero             |
+
+## Example 4. Competing risks analysis
+
 The code below specifies direct polytomous regression of both of
 competing events (outcome.type=‘COMPETINGRISK’). Initial values of
-regression parameters are imported by data.initial.values=.
+regression parameters are imported by data.initial.values.
 
 ``` r
 data.initial.values <- c(-20.01, 1.591, -0.2065, 1.962, 10.05, 4.004, 0.9624, 1.582, 2.414, -0.02140,
@@ -244,13 +331,13 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 <tbody>
 <tr class="odd">
 <td>fruitq1 ( ref = 0 )</td>
-<td>1.557</td>
+<td>1.558</td>
 <td>0.913</td>
 </tr>
 <tr class="even">
 <td></td>
-<td>[1.311, 1.850]</td>
-<td>[0.461, 1.805]</td>
+<td>[1.311, 1.851]</td>
+<td>[0.461, 1.806]</td>
 </tr>
 <tr class="odd">
 <td>effect.measure</td>
@@ -274,8 +361,8 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 </tr>
 <tr class="odd">
 <td>median.follow.up</td>
-<td>7.9973 [ 0.0493 , 11.0034 ]</td>
-<td>7.9973 [ 0.0493 , 11.0034 ]</td>
+<td>8 [ 0.05 , 11 ]</td>
+<td>8 [ 0.05 , 11 ]</td>
 </tr>
 <tr class="even">
 <td>n.parameters</td>

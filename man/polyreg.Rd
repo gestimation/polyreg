@@ -15,7 +15,7 @@ polyreg(
   code.exposure.ref = 0,
   effect.measure1 = "RR",
   effect.measure2 = "RR",
-  time.point,
+  time.point = NULL,
   outcome.type = "COMPETINGRISK",
   conf.level = 0.95,
   outer.optim.method = "nleqslv",
@@ -30,17 +30,20 @@ polyreg(
   data.initial.values = NULL,
   should.normalize.covariate = TRUE,
   should.sort.data = TRUE,
-  prob.bound = 1e-05
+  prob.bound = 1e-05,
+  boot.bca = TRUE,
+  boot.parameter1 = 200,
+  boot.parameter2 = 46
 )
 }
 \arguments{
 \item{nuisance.model}{formula Model formula representing outcome, exposure and covariates}
 
-\item{exposure}{character Column name representing the exposure. The exposure variable should be coded with 0 and 1 (e.g. 1 = exposed, 0 = not exposed).}
+\item{exposure}{character Column name representing the binary exposure variable.}
 
-\item{strata}{character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL}
+\item{strata}{character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL.}
 
-\item{data}{data.frame Input dataset containing survival data.}
+\item{data}{data.frame Input dataset containing the outcome, the exposure and covariates.}
 
 \item{code.event1}{integer Specifies the code of event 1. Defaults to 1.}
 
@@ -56,7 +59,7 @@ polyreg(
 
 \item{time.point}{numeric The time point for exposure effects to be estimated.}
 
-\item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK or SURVIVAL).}
+\item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).}
 
 \item{conf.level}{numeric The level for confidence intervals.}
 
@@ -83,6 +86,12 @@ polyreg(
 \item{should.sort.data}{logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.}
 
 \item{prob.bound}{numeric Small threshold for clamping probabilities. Defaults to 1e-5.}
+
+\item{boot.bca}{character Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal appriximation).}
+
+\item{boot.parameter1}{numeric Reprecation for bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
+
+\item{boot.parameter2}{numeric Seed used in bootstrap confidence intervals when outcome.type==PROPORTIONAL.}
 
 \item{data.initlal.values}{data.frame Optional dataset containing initial values. Defaults to NULL.}
 }

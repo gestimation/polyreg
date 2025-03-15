@@ -31,13 +31,6 @@ estimating_equation_ipcw <- function(
     offset <- rep(0, nrow(mf))
   }
 
-  #y_0 <- ifelse(epsilon == 0 | t > estimand$time.point, 1, 0)
-  #y_1 <- ifelse(epsilon == 1 & t <= estimand$time.point, 1, 0)
-  #y_2 <- ifelse(epsilon == 2 & t <= estimand$time.point, 1, 0)
-  #y_0_ <- ifelse(epsilon == 0, 1, 0)
-  #y_1_ <- ifelse(epsilon == 1, 1, 0)
-  #y_2_ <- ifelse(epsilon == 2, 1, 0)
-
   y_0 <- ifelse(epsilon == estimand$code.censoring | t > estimand$time.point, 1, 0)
   y_1 <- ifelse(epsilon == estimand$code.event1 & t <= estimand$time.point, 1, 0)
   y_2 <- ifelse(epsilon == estimand$code.event2 & t <= estimand$time.point, 1, 0)
@@ -243,8 +236,14 @@ estimating_equation_survival <- function(
   mf[[1]] <- as.name("model.frame")
   mf <- eval(mf, parent.frame())
   Y <- model.extract(mf, "response")
-  t <- Y[, 1]  # time variable
-  epsilon <- Y[, 2]  # status variable
+
+  if (!inherits(Y, c("Event", "Surv"))) {
+    t <- rep(0, length(Y))
+    epsilon <- Y
+  } else {
+    t <- Y[, 1]
+    epsilon <- Y[, 2]
+  }
   if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
     ts <- survival::untangle.specials(Terms, "offset")
     if (length(ts$vars) > 0) {
@@ -351,7 +350,6 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 
-
 calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
   CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
@@ -403,8 +401,8 @@ estimating_equation_proportional <- function(
   mf[[1]] <- as.name("model.frame")
   mf <- eval(mf, parent.frame())
   Y <- model.extract(mf, "response")
-  t <- Y[, 1]  # time variable
-  epsilon <- Y[, 2]  # status variable
+  t <- Y[, 1]
+  epsilon <- Y[, 2]
   if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
     ts <- survival::untangle.specials(Terms, "offset")
     if (length(ts$vars) > 0) {
@@ -430,14 +428,14 @@ estimating_equation_proportional <- function(
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a)
+  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a,length(time.point))
 
-  n_para_1 <- ncol(x_l)
-  n_para_2 <- n_para_1 + 1
-  n_para_3 <- n_para_1 + 2
-  n_para_4 <- 2*n_para_1 + 1
-  n_para_5 <- 2*n_para_1 + 2
-  n_para_6 <- length(time.point)*(n_para_5-2) + 2
+  #n_para_1 <- ncol(x_l)
+  #n_para_2 <- n_para_1 + 1
+  #n_para_3 <- n_para_1 + 2
+  #n_para_4 <- 2*n_para_1 + 1
+  #n_para_5 <- 2*n_para_1 + 2
+  #n_para_6 <- length(time.point)*(n_para_5-2) + 2
 
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
@@ -445,14 +443,21 @@ estimating_equation_proportional <- function(
   score_alpha1 <- 0
   score_alpha2 <- 0
   i_time <- 0
-  alpha_beta_i <- rep(NA, n_para_5)
+  alpha_beta_i <- rep(NA, i_parameter[7])
+  #alpha_beta_i <- rep(NA, n_para_5)
   for (specific.time in time.point) {
     i_time <- i_time + 1
-    i_para <- n_para_1*(i_time-1)+1
-    alpha_beta_i[1:n_para_1]        <- alpha_beta[i_para:(i_para+n_para_1-1)]
-    alpha_beta_i[n_para_2]          <- alpha_beta[n_para_6/2]
-    alpha_beta_i[n_para_3:n_para_4] <- alpha_beta[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]
-    alpha_beta_i[n_para_5]          <- alpha_beta[n_para_6]
+    i_para <- i_parameter[1]*(i_time-1)+1
+#    i_para <- n_para_1*(i_time-1)+1
+    alpha_beta_i[1:i_parameter[1]]              <- alpha_beta[i_para:(i_para+i_parameter[1]-1)]
+    alpha_beta_i[i_parameter[2]:i_parameter[3]] <- alpha_beta[i_parameter[8]/2]
+    alpha_beta_i[i_parameter[4]:i_parameter[5]] <- alpha_beta[(i_parameter[8]/2+i_para):(i_parameter[8]/2+i_para+i_parameter[1]-1)]
+    alpha_beta_i[i_parameter[6]:i_parameter[7]] <- alpha_beta[i_parameter[8]]
+
+    #alpha_beta_i[1:n_para_1]        <- alpha_beta[i_para:(i_para+n_para_1-1)]
+    #alpha_beta_i[n_para_2]          <- alpha_beta[n_para_6/2]
+    #alpha_beta_i[n_para_3:n_para_4] <- alpha_beta[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]
+    #alpha_beta_i[n_para_5]          <- alpha_beta[n_para_6]
 
     y_0 <- ifelse(epsilon == 0 | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
@@ -485,44 +490,66 @@ estimating_equation_proportional <- function(
 
     residual <- c(wy_1ey_1, wy_2ey_2)
     subscore <- as.matrix(t(d) %*% residual / nrow(x_l))
-    tmp1 <- t(subscore[1:n_para_1,])
-    tmp2 <- t(subscore[n_para_3:n_para_4,])
+    #tmp1 <- t(subscore[1:n_para_1,])
+    #tmp2 <- t(subscore[n_para_3:n_para_4,])
+    #score_beta <- cbind(score_beta, tmp1, tmp2)
+    #score_alpha1 <- score_alpha1 + subscore[n_para_2,]
+    #score_alpha2 <- score_alpha2 + subscore[n_para_5,]
+
+    tmp1 <- t(subscore[1:i_parameter[1],])
+    tmp2 <- t(subscore[i_parameter[4]:i_parameter[5],])
     score_beta <- cbind(score_beta, tmp1, tmp2)
-    score_alpha1 <- score_alpha1 + subscore[n_para_2,]
-    score_alpha2 <- score_alpha2 + subscore[n_para_5,]
+    score_alpha1 <- score_alpha1 + subscore[i_parameter[2]:i_parameter[3],]
+    score_alpha2 <- score_alpha2 + subscore[i_parameter[6]:i_parameter[7],]
   }
   score <- cbind(score_beta, score_alpha1, score_alpha2)
-  out <- list(ret = score)
+  out <- list(
+    ret   = score,
+    t     = t,
+    y_0   = y_0,
+    y_1   = y_1,
+    y_2   = y_2,
+    y_0_  = y_0_,
+    y_1_  = y_1_,
+    y_2_  = y_2_,
+    x_a   = x_a,
+    x_l   = x_l,
+    i_parameter = i_parameter
+  )
+#  out <- list(ret = score)
   return(out)
 }
 
+createAtRiskMatrix <- function(t) {
+  atrisk <- outer(t, t, "<=")
+  return(atrisk)
+}
+
 calculateKaplanMeier <- function(t, d){
-  n = length(t)
-  data = data.frame(t = t, d = d, id = 1:n)
-  sorted_data = data[order(data$t), ]
-  sorted_t = sorted_data$t
-  sorted_d = sorted_data$d
-  sorted_id = sorted_data$id
-  t_matrix = matrix(rep(sorted_t, each = n), nrow = n, byrow = TRUE)
-  atrisk = t(t_matrix) >= t_matrix
-  n_atrisk = rowSums(atrisk)
-  s = 1 - sorted_d / n_atrisk
-  log_s = log(s)
-  km = exp(cumsum(log_s))
-  data = data.frame(id=sorted_id, km=km)
-  sorted_data = data[order(data$id), ]
-  km = sorted_data$km
+  n <- length(t)
+  data <- data.frame(t = t, d = d, id = 1:n)
+  sorted_data <- data[order(data$t), ]
+  sorted_t <- sorted_data$t
+  sorted_d <- sorted_data$d
+  sorted_id <- sorted_data$id
+  atrisk <- createAtRiskMatrix(sorted_t)
+  n_atrisk <- rowSums(atrisk)
+  s <- 1 - sorted_d / n_atrisk
+  km <- cumprod(s)
+  data <- data.frame(id=sorted_id, km=km)
+  sorted_data <- data[order(data$id), ]
+  km <- sorted_data$km
   return(km)
 }
 
 calculateNelsonAalen <- function(t, d) {
-  atrisk <- outer(t, t, ">=")
-  n_atrisk <- colSums(atrisk)
+  atrisk <- createAtRiskMatrix(t)
+  n_atrisk <- rowSums(atrisk)
   na <- d / n_atrisk
   return(na)
 }
 
-calculateIndexForParameter <- function(i_parameter,x_l,x_a) {
+calculateIndexForParameter <- function(i_parameter,x_l,x_a,length.time.point=1) {
   i_parameter[1] <- ncol(x_l)
   i_parameter[2] <- i_parameter[1] + 1
   i_parameter[3] <- i_parameter[1] + ncol(x_a)
@@ -530,6 +557,7 @@ calculateIndexForParameter <- function(i_parameter,x_l,x_a) {
   i_parameter[5] <- 2 * i_parameter[1] + ncol(x_a)
   i_parameter[6] <- 2 * i_parameter[1] + ncol(x_a) + 1
   i_parameter[7] <- 2 * i_parameter[1] + 2 * ncol(x_a)
+  i_parameter[8] <- length.time.point*(2 * i_parameter[1]) + 2 * ncol(x_a)
   return(i_parameter)
 }
 
