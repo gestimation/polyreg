@@ -21,11 +21,16 @@ getInitialValues <- function(
       }
     }
   } else {
-    t <- Y[, 1]
-    if (any(t<0)) {
+    t <- as.numeric(Y[, 1])
+    if (any(t<0))
       stop("Invalid time variable. Expected non-negative values. ")
+    if (any(is.na(t)))
+      stop("Time variable contains NA values")
+    if (any(is.na(Y[, 2]))) {
+      stop("Event variable contains NA values")
+    } else {
+      epsilon <- Y[, 2]
     }
-    epsilon <- Y[, 2]
     if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring)) & (outcome.type == 'SURVIVAL')) {
       stop("Invalid event codes. Must be 0 or 1, with 0 representing censoring, if event codes are not specified. ")
     } else if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring))) {
@@ -44,11 +49,6 @@ getInitialValues <- function(
     offset <- rep(0, nrow(mf))
   }
 
-  if (any(is.na(data[[exposure]])))
-    stop("Variables contain NA values")
-  if (!nrow(data) == nrow(mf))
-    stop("Variables contain NA values")
-
   a_ <- as.factor(data[[exposure]])
   if (estimand$code.exposure.ref==0) {
     x_a <- as.matrix(model.matrix(~ a_)[, -1])
@@ -58,6 +58,10 @@ getInitialValues <- function(
   a <- as.vector(x_a)
   x_l <- model.matrix(Terms, mf)
   n_para_1 <- ncol(x_l)
+  if (any(is.na(data[[exposure]])))
+    stop("Exposure variable contains NA values")
+  if (any(is.na(x_l)))
+    stop("Covariates contain NA values")
 
   if (!is.null(data.initial.values)) {
     x_l <- model.matrix(Terms, mf)

@@ -17,6 +17,8 @@ polyreg(
   effect.measure2 = "RR",
   time.point = NULL,
   outcome.type = "COMPETINGRISK",
+  subset = NULL,
+  na.action = na.pass,
   conf.level = 0.95,
   report.nuisance.parameter = FALSE,
   report.optim.convergence = FALSE,
@@ -63,6 +65,10 @@ polyreg(
 \item{time.point}{numeric The time point for exposure effects to be estimated.}
 
 \item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).}
+
+\item{subset}{character A condition for selecting a subset of the input dataset. Defaults to NULL.}
+
+\item{na.action}{character Specifies how missing data are handled. Defaults to na.pass.}
 
 \item{conf.level}{numeric The level for confidence intervals.}
 

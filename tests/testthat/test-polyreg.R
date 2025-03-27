@@ -1,4 +1,5 @@
 test_that("calculateIPCW produced expected IP weights in diabetes.complications", {
+  library(mets)
   data(diabetes.complications)
   output <- calculateIPCW(formula=Event(t,epsilon)~+1, data=diabetes.complications, code.censoring=0, strata_name='strata', specific.time=8)
   tested <- round(output[1:6],digit=3)

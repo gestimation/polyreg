@@ -10,10 +10,8 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
   if (!inherits(Y, c("Event", "Surv")))
     stop("Expected a 'Surv' or 'Event'-object")
   if (ncol(Y) == 2) {
-    t <- Y[, 1]  # time variable
-    epsilon <- Y[, 2] # status variable
-    if (any(t<0))
-      stop("Expected non-negative time variable")
+    t <- Y[, 1]
+    epsilon <- Y[, 2]
   }
 
   censoring.model <- createCensoringFormula(formula=formula, code.censoring.updated=code.censoring, strata_name=strata_name)
