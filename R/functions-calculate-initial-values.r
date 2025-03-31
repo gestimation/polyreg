@@ -1,3 +1,110 @@
+Surv_ <- function (time, event)
+{
+  if (missing(time))
+    stop("Must have a time argument")
+  if (!is.numeric(time))
+    stop("Time variable is not numeric")
+  if (!is.na(any(time)))
+    warning("Invalid time variable. NA values included")
+  #  if (any(time<0))
+  #    warning("Invalid time variable. Non-negative values included")
+  if (length(event) != length(time))
+    stop("Time and event variables are different lengths")
+  if (missing(event))
+    stop("Must have an event argument")
+  if (is.numeric(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- event
+  } else if (is.logical(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- as.numeric(event)
+    warning("Event variable is logical, converted to numearic")
+  } else if (is.factor(event)) {
+    status <- as.numeric(as.factor(event)) - 1
+    warning("Event variable is a factor, converted to numearic")
+  } else stop("Invalid status value, must be logical or numeric")
+  if (nlevels(as.factor(event)) > 3)
+    warning("Event variable should not have more than three levels")
+  ss <- cbind(time = time, status = status)
+  type <- "right"
+
+  inputAttributes <- list()
+  if (!is.null(attributes(time)))
+    inputAttributes$time <- attributes(time)
+  cname <- dimnames(ss)[[2]]
+  if (length(cname) == 0) {
+    cname <- c("time", "status")
+  }
+  dimnames(ss) <- list(NULL, cname)
+  attr(ss, "type") <- type
+  if (length(inputAttributes) > 0)
+    attr(ss, "inputAttributes") <- inputAttributes
+  class(ss) <- "Surv"
+  ss
+}
+
+Event_ <- function (time, event)
+{
+  if (missing(time))
+    stop("A time argument is required")
+  if (!is.numeric(time))
+    stop("Time variable is not numeric")
+  if (!is.na(any(time)))
+    warning("Invalid time variable. NA values included")
+  #  if (any(time<0))
+  #    warning("Invalid time variable. Non-negative values included")
+  if (length(event) != length(time))
+    stop("Time and event variables are different lengths")
+  if (missing(event))
+    stop("An event argument is required")
+  if (is.numeric(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- event
+  } else if (is.is.logical(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- as.numeric(event)
+    warning("Event variable is logical, converted to numearic")
+  } else if (is.factor(event)) {
+    status <- as.numeric(as.factor(event)) - 1
+    warning("Event variable is a factor, converted to numearic")
+  } else stop("Invalid status value, must be logical or numeric")
+  if (nlevels(as.factor(event)) > 3)
+    warning("Event variable should not have more than three levels")
+  ss <- cbind(time = time, status = status)
+  type <- "right"
+
+  inputAttributes <- list()
+  if (!is.null(attributes(time)))
+    inputAttributes$time <- attributes(time)
+  cname <- dimnames(ss)[[2]]
+  if (length(cname) == 0) {
+    cname <- c("time", "status")
+  }
+  dimnames(ss) <- list(NULL, cname)
+  attr(ss, "type") <- type
+  if (length(inputAttributes) > 0)
+    attr(ss, "inputAttributes") <- inputAttributes
+  class(ss) <- "Event"
+  ss
+}
+createAnalysisDataset <- function(formula, data, other_variables_required=NULL, subset_condition=NULL, na.action) {
+  if (!is.null(subset_condition)) {
+    analysis_dataset <- subset(data, eval(parse(text = subset_condition)))
+  } else {
+    analysis_dataset <- data
+  }
+  all_vars <- all.vars(formula)
+  if (!is.null(other_variables_required)) {
+    all_vars <- c(all_vars, other_variables_required)
+  }
+  analysis_dataset <- analysis_dataset[, all_vars, drop = FALSE]
+  return(na.action(analysis_dataset))
+}
+
 getInitialValues <- function(
     formula, data, exposure, data.initial.values, estimand, specific.time, outcome.type, prob.bound
 ) {
