@@ -12,8 +12,6 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
   if (ncol(Y) == 2) {
     t <- Y[, 1]
     epsilon <- Y[, 2]
-    if (any(t<0))
-      stop("Expected non-negative time variable")
   }
 
   #censoring.model <- createCensoringFormula(formula=formula, code.censoring.updated=code.censoring, strata_name=strata_name)
