@@ -14,8 +14,6 @@
 #' @param effect.measure2 character Specifies the effect measure for competing risk (RR, OR, SHR).
 #' @param time.point numeric The time point for exposure effects to be estimated.
 #' @param outcome.type character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).
-#' @param subset character A condition for selecting a subset of the input dataset. Defaults to NULL.
-#' @param na.action character Specifies how missing data are handled. Defaults to na.pass.
 #' @param conf.level numeric The level for confidence intervals.
 #' @param report.nuisance.parameter logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.
 #' @param report.optim.convergence logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.
@@ -62,8 +60,6 @@ polyreg <- function(
     effect.measure2 = 'RR',
     time.point = NULL,
     outcome.type = 'COMPETINGRISK',
-    subset = NULL,
-    na.action = na.pass,
     conf.level = 0.95,
     report.nuisance.parameter = FALSE,
     report.optim.convergence = FALSE,
