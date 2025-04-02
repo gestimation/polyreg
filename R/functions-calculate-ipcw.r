@@ -10,20 +10,29 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
   if (!inherits(Y, c("Event", "Surv")))
     stop("Expected a 'Surv' or 'Event'-object")
   if (ncol(Y) == 2) {
-    t <- Y[, 1]  # time variable
-    epsilon <- Y[, 2] # status variable
+    t <- Y[, 1]
+    epsilon <- Y[, 2]
     if (any(t<0))
       stop("Expected non-negative time variable")
   }
 
-  censoring.model <- createCensoringFormula(formula=formula, code.censoring.updated=code.censoring, strata_name=strata_name)
-  resC <- phreg(censoring.model, data)
-  if (resC$p > 0) kmt <- FALSE
-  kmt <- TRUE
-  out_predict1 <- suppressWarnings(stats::predict(resC, newdata = data, type = "survival", times = t, individual.time = TRUE, se = FALSE, km = kmt, tminus = TRUE))
-  out_predict2 <- suppressWarnings(stats::predict(resC, newdata = data, type = "survival", times = specific.time, individual.time = TRUE, se = FALSE, km = kmt, tminus = TRUE))
-  km1 <- out_predict1$surv
-  km2 <- out_predict2$surv[1]
+  #censoring.model <- createCensoringFormula(formula=formula, code.censoring.updated=code.censoring, strata_name=strata_name)
+  #resC <- phreg(censoring.model, data)
+  #if (resC$p > 0) kmt <- FALSE
+  #kmt <- TRUE
+  #out_predict1 <- suppressWarnings(stats::predict(resC, newdata = data, type = "survival", times = t, individual.time = TRUE, se = FALSE, km = kmt, tminus = TRUE))
+  #out_predict2 <- suppressWarnings(stats::predict(resC, newdata = data, type = "survival", times = specific.time, individual.time = TRUE, se = FALSE, km = kmt, tminus = TRUE))
+  #km1 <- out_predict1$surv
+  #  km2 <- out_predict2$surv[1]
+
+  d <- as.numeric(epsilon==0)
+#  strata <- data[strata_name]
+#  print(strata)
+#  out_km <- calculateKM_rcpp(t=t, d=d, strata=strata)
+  out_km <- calculateKM_rcpp(t=t, d=d)
+  km1 <- get_surv(out_km$time, out_km$surv, t)
+  km2 <- get_surv(out_km$time, out_km$surv, specific.time)
+
   tmp1 <- ifelse(km1 > 0, 1 / km1, 0)
   tmp2 <- ifelse(km2 > 0, 1 / km2, 0)
   censoring_status <- as.numeric(epsilon==code.censoring)
@@ -35,6 +44,17 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
   return(ip.weight)
 }
 
+get_surv <- function(time, surv, time.points) {
+  surv_at_time_points <- sapply(time.points, function(t) {
+    time_until_t <- time[time < t]
+    if (length(time_until_t) > 0) {
+      index <- which.max(time_until_t)
+      return(surv[index])
+    } else {
+      return(1)
+    }
+    })
+}
 
 createCensoringFormula <- function(formula, code.censoring.updated, strata_name = NULL) {
   lhs <- formula[[2]]

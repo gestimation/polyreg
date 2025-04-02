@@ -1,10 +1,10 @@
-#' @title Direct polynomial regression for survival and competing risks analysis
+#' @title Direct polynomial regression for competing risks, survival and binomial analysis
 #'
 #' @param nuisance.model formula Model formula representing outcome and covariates other than exposure
 #' @param exposure character Column name representing the binary exposure variable.
 #' @param strata character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL.
 #' @param data data.frame Input dataset containing the outcome, the exposure and covariates.
-#' @param subset character Specifies a condition for subsetting the data. Defaults to NULL.
+#' @param subset.condition character Specifies a condition for subsetting the data. Defaults to NULL.
 #' @param na.action character Specifies a missing-data filter function, applied to the model frame, after any subset argument has been used. Defaults to na.omit.
 #' @param code.event1 integer Specifies the code of event 1. Defaults to 1.
 #' @param code.event2 integer Specifies the code of event 2. Defaults to 2.
@@ -34,8 +34,6 @@
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
 #' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
-#' @importFrom mets phreg Event
-#' @importFrom survival Surv
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
 #'
@@ -52,7 +50,7 @@ polyreg <- function(
     exposure,
     strata = NULL,
     data,
-    subset = NULL,
+    subset.condition = NULL,
     na.action = na.omit,
     code.event1 = 1,
     code.event2 = 2,
@@ -115,7 +113,7 @@ polyreg <- function(
     optim.parameter7 = optim.parameter7
   )
 
-  data <- createAnalysisDataset(formula=nuisance.model, data=data, other_variables_required=c(exposure, strata), subset_condition=NULL, na.action=na.action)
+  data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
   sorted_data <- sortByCovariate(nuisance.model, normalized_data, should.sort.data, out_normalizeCovariate$n_covariate)

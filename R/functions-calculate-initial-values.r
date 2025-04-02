@@ -1,4 +1,4 @@
-Surv_ <- function (time, event)
+Surv <- function (time, event)
 {
   if (missing(time))
     stop("Must have a time argument")
@@ -45,7 +45,7 @@ Surv_ <- function (time, event)
   ss
 }
 
-Event_ <- function (time, event)
+Event <- function (time, event)
 {
   if (missing(time))
     stop("A time argument is required")
@@ -63,7 +63,7 @@ Event_ <- function (time, event)
     if (!is.na(any(event)))
       warning("Invalid event variable. NA values included")
     status <- event
-  } else if (is.is.logical(event)) {
+  } else if (is.logical(event)) {
     if (!is.na(any(event)))
       warning("Invalid event variable. NA values included")
     status <- as.numeric(event)
@@ -91,16 +91,14 @@ Event_ <- function (time, event)
   class(ss) <- "Event"
   ss
 }
-createAnalysisDataset <- function(formula, data, other_variables_required=NULL, subset_condition=NULL, na.action) {
-  if (!is.null(subset_condition)) {
-    analysis_dataset <- subset(data, eval(parse(text = subset_condition)))
+
+createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {
+  if (!is.null(subset.condition)) {
+    analysis_dataset <- subset(data, eval(parse(text = subset.condition)))
   } else {
     analysis_dataset <- data
   }
-  all_vars <- all.vars(formula)
-  if (!is.null(other_variables_required)) {
-    all_vars <- c(all_vars, other_variables_required)
-  }
+  all_vars <- c(all.vars(formula), other.variables.analyzed)
   analysis_dataset <- analysis_dataset[, all_vars, drop = FALSE]
   return(na.action(analysis_dataset))
 }

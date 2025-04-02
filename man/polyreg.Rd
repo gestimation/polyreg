@@ -9,6 +9,8 @@ polyreg(
   exposure,
   strata = NULL,
   data,
+  subset.condition = NULL,
+  na.action = na.omit,
   code.event1 = 1,
   code.event2 = 2,
   code.censoring = 0,
@@ -47,6 +49,10 @@ polyreg(
 \item{strata}{character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL.}
 
 \item{data}{data.frame Input dataset containing the outcome, the exposure and covariates.}
+
+\item{subset.condition}{character Specifies a condition for subsetting the data. Defaults to NULL.}
+
+\item{na.action}{character Specifies a missing-data filter function, applied to the model frame, after any subset argument has been used. Defaults to na.omit.}
 
 \item{code.event1}{integer Specifies the code of event 1. Defaults to 1.}
 
