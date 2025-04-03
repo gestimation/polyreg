@@ -2,7 +2,7 @@
 % Please edit documentation in R/polyreg.R
 \name{polyreg}
 \alias{polyreg}
-\title{Direct polynomial regression for survival and competing risks analysis}
+\title{Direct polynomial regression for competing risks, survival and binomial analysis}
 \usage{
 polyreg(
   nuisance.model,
@@ -19,8 +19,6 @@ polyreg(
   effect.measure2 = "RR",
   time.point = NULL,
   outcome.type = "COMPETINGRISK",
-  subset = NULL,
-  na.action = na.pass,
   conf.level = 0.95,
   report.nuisance.parameter = FALSE,
   report.optim.convergence = FALSE,
@@ -72,10 +70,6 @@ polyreg(
 
 \item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).}
 
-\item{subset}{character A condition for selecting a subset of the input dataset. Defaults to NULL.}
-
-\item{na.action}{character Specifies how missing data are handled. Defaults to na.pass.}
-
 \item{conf.level}{numeric The level for confidence intervals.}
 
 \item{report.nuisance.parameter}{logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.}
@@ -120,7 +114,7 @@ polyreg(
 A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary meets requirement of msummary function. diagnosis.statistics in includes inverse probability weights, influence functions, and predicted potential outcomes
 }
 \description{
-Direct polynomial regression for survival and competing risks analysis
+Direct polynomial regression for competing risks, survival and binomial analysis
 }
 \examples{
 data(diabetes.complications)

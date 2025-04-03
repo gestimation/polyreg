@@ -1,23 +1,3 @@
-test_that("calculateIPCW produced expected IP weights in diabetes.complications", {
-  library(mets)
-  data(diabetes.complications)
-  output <- calculateIPCW(formula=Event(t,epsilon)~+1, data=diabetes.complications, code.censoring=0, strata_name='strata', specific.time=8)
-  tested <- round(output[1:6],digit=3)
-  expected <- c(1.656, 1.656, 0, 1.656, 1.656, 1.004)
-  expect_equal(tested, expected)
-})
-
-test_that("calculateKM_rcpp and get_surv produced expected KM in diabetes.complications", {
-  data("diabetes.complications")
-  diabetes.complications$d <- as.numeric(diabetes.complications$epsilon==0)
-  resC <- phreg(Surv(diabetes.complications$t, diabetes.complications$d) ~ 1, data=diabetes.complications)
-  out_predict1 <- suppressWarnings(stats::predict(resC, newdata = diabetes.complications, type = "survival", times = diabetes.complications$t, individual.time = TRUE, se = FALSE, km = TRUE, tminus = TRUE))
-  expected <- out_predict1$surv
-  out_km <- calculateKM_rcpp(diabetes.complications$t, diabetes.complications$d)
-  tested <- as.matrix(get_surv(out_km$time, out_km$surv, diabetes.complications$t))
-  expect_equal(tested, expected)
-})
-
 test_that("polyreg produced expected coefficients and variance covariance matrix from competing risks data in diabetes.complications", {
   data(diabetes.complications)
   output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
@@ -27,29 +7,6 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expected <- c(-1.383, 0.300, -3.991, 0.076, 0.007, -0.005, -0.001, 0.005)
   expect_equal(tested, expected)
 })
-
-#test_that("polyreg produced expected coefficients and variance covariance matrix from competing risks data in diabetes.complications", {
-#  library(dplyr)
-#  library(boot)
-#  data(prostate)
-#  prostate <- prostate %>% mutate(epsilon=ifelse(status=="alive",0,
-#                                                ifelse(status=="dead - prostatic ca",1,
-#                                                ifelse(status=="dead - other ca",1,
-#                                                ifelse(status=="dead - heart or vascular",2,
-#                                                ifelse(status=="dead - cerebrovascular",2,2)
-#                                  )))))
-#  prostate$epsilon <- as.numeric(prostate$epsilon)
-#  prostate$a <- as.numeric((prostate$rx=="placebo"))
-#  prostate$t <- prostate$dtime/12
-#  output <- polyreg(nuisance.model = Event(t,epsilon) ~ +1, exposure = 'a', strata='stage', data = prostate,
-#                    effect.measure1='RR', effect.measure2='RR', time.point=1:5, outcome.type='PROPORTIONAL', boot.R=20)
-#  tested_coefficient <- round(output$coefficient,digit=3)
-#  tested_cov <- round(output$cov[1,],digit=3)
-#  tested <- as.vector(cbind(tested_coefficient,tested_cov))
-#  expected <- c(-1.383, 0.300, -3.991, 0.076, 0.007, -0.005, -0.001, 0.005)
-#  expect_equal(expected, tested)
-#})
-
 
 test_that("polyreg produced expected coefficients and variance covariance matrix when stratified IPCW used", {
   data(diabetes.complications)
@@ -115,46 +72,6 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expect_equal(tested, expected)
 })
 
-test_that("createAnalysisDataset produced expected variables with missing data", {
-  data(diabetes.complications)
-  nuisance.model <- t~fruitq1
-
-  other.variables.analyzed <- NULL
-  all_vars <- c(all.vars(nuisance.model), other.variables.analyzed)
-  expected <- diabetes.complications[, all_vars, drop = FALSE]
-  expected <- expected[-(1), ]
-  expected <- expected$t
-  diabetes.complications$t[1] <- NA
-  tested <- createAnalysisDataset(formula=nuisance.model, data=diabetes.complications, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.omit)
-  tested <- tested$t
-  expect_equal(tested, expected)
-})
-
-test_that("createAnalysisDataset produced expected a subset dataset", {
-  data(diabetes.complications)
-  nuisance.model <- t~fruitq1
-
-  other.variables.analyzed <- NULL
-  all_vars <- c(all.vars(nuisance.model), other.variables.analyzed)
-  expected <- diabetes.complications[, all_vars, drop = FALSE]
-  subset.condition="(diabetes.complications$fruitq1 == 1)"
-  expected <- subset(expected, eval(parse(text = subset.condition)))
-  tested <- createAnalysisDataset(formula=nuisance.model, data=diabetes.complications, other.variables.analyzed=NULL, subset.condition="(diabetes.complications$fruitq1 == 1)", na.action=na.omit)
-  expect_equal(tested, expected)
-})
-
-test_that("createAnalysisDataset produced expected a subset dataset of men", {
-  data(diabetes.complications)
-  nuisance.model <- t~fruitq1
-
-  other.variables.analyzed <- "sex"
-  all_vars <- c(all.vars(nuisance.model), other.variables.analyzed)
-  expected <- diabetes.complications[, all_vars, drop = FALSE]
-  subset.condition="(diabetes.complications$sex == 1)"
-  expected <- subset(expected, eval(parse(text = subset.condition)))
-  tested <- createAnalysisDataset(formula=nuisance.model, data=diabetes.complications, other.variables.analyzed="sex", subset.condition="(diabetes.complications$sex == 1)", na.action=na.omit)
-  expect_equal(tested, expected)
-})
 
 test_that("polyreg produced expected coefficients and variance covariance matrix from survival data in men", {
   data(diabetes.complications)
@@ -211,7 +128,7 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
 #                    effect.measure1='RR', effect.measure2='RR', time.point=1:5, outcome.type='PROPORTIONAL', boot.parameter1=1000)
 #  tested_conf.low <- round(output$summary$event1$tidy$conf.low,digit=3)
 #  tested_conf.high <- round(output$summary$event1$tidy$conf.high,digit=3)
-#  tested <- as.vector(cbind(tested_conf.low,tested_conf.high))
+#  tested <- as.vector(cbind(tested_conf.low, tested_conf.high))
 #  expected <- c(-0.362, 0.335)
 #  expect_equal(tested, expected)
 #})

@@ -1,4 +1,4 @@
-#' Title Kaplan-Meier estimator for survival and competing risks analysis
+#' Title
 #'
 #' @param formula formula Model formula representing outcome and strata
 #' @param data data.frame Input dataset containing survival data.
@@ -23,16 +23,19 @@
 #' @param font.size numeric Specifies font size of the plot. Defaults to 14.
 #' @param legend.position character Specifies position of the legend of curves. Defaults to "top".
 #' @importFrom ggsurvfit ggsurvfit
-#' @importFrom Rcpp
-
-#' @returns
+#'
+#' @returns An object consists of Kaplan-Meier estimator and related statistics. This object is formatted to conform to the suvrfit class.
 #' @export km.curve
 #'
 #' @examples
+#' library(ggsurvfit)
+#' data(diabetes.complications)
+#' diabetes.complications$d <- as.numeric(diabetes.complications$epsilon>0)
+#' km.curve(Surv(t, d)~fruitq1, data=diabetes.complications)
 km.curve <- function(formula,
                      data,
                      weights = NULL,
-                     subset.condition = NULL,
+                     subset = NULL,
                      code.event = 1,
                      code.censoring = 0,
                      na.action = na.pass,
@@ -53,51 +56,37 @@ km.curve <- function(formula,
                      legend.position = "top"
 ) {
   checkDependentPackages()
-  out_readSurv <- readSurv(formula, data, weights, code.event, code.censoring, subset.condition, na.action)
+  out_readSurv <- readSurv(formula, data, weights, code.event, code.censoring, subset, na.action)
   out_km <- calculateKM_rcpp(out_readSurv$t, out_readSurv$d, out_readSurv$w, as.integer(out_readSurv$strata), error)
+  if (!all(as.integer(out_readSurv$strata) == 1) & (is.null(label.strata))) {
+    names(out_km$strata) <- levels(as.factor(out_readSurv$strata))
+  } else if (!all(as.integer(out_readSurv$strata) == 1)) {
+    names(out_km$strata) <- label.strata
+  }
   out_ci <- calculateCI(out_km, conf.int, conf.type, conf.lower)
   if (is.null(lims.x)) {
     lims.x <- c(0, max(out_readSurv$t))
   }
-  if (all(as.integer(out_readSurv$strata) == 1)) {
-    survfit_object <- list(
-      time = out_km$time,
-      surv = out_km$surv,
-      n = out_km$n,
-      n.risk = out_km$n.risk,
-      n.event = out_km$n.event,
-      n.censor = out_km$n.censor,
-      std.err = out_km$std.err,
-      upper = out_ci$upper,
-      lower = out_ci$lower,
-      conf.type = conf.type,
-      call = match.call(),
-      type = "kaplan-meier",
-      method = "Kaplan-Meier"
-    )
-  } else {
-    if (is.null(label.strata)) {
-      names(out_km$strata) <- levels(as.factor(out_readSurv$strata))
-    } else {
-      names(out_km$strata) <- label.strata
-    }
-    survfit_object <- list(
-      time = out_km$time,
-      surv = out_km$surv,
-      n = out_km$n,
-      n.risk = out_km$n.risk,
-      n.event = out_km$n.event,
-      n.censor = out_km$n.censor,
-      std.err = out_km$std.err,
-      upper = out_ci$upper,
-      lower = out_ci$lower,
-      conf.type = conf.type,
-      strata = out_km$strata,
-      call = match.call(),
-      type = "kaplan-meier",
-      method = "Kaplan-Meier"
-    )
+
+  survfit_object <- list(
+    time = out_km$time,
+    surv = out_km$surv,
+    n = out_km$n,
+    n.risk = out_km$n.risk,
+    n.event = out_km$n.event,
+    n.censor = out_km$n.censor,
+    std.err = out_km$std.err,
+    upper = out_ci$upper,
+    lower = out_ci$lower,
+    conf.type = conf.type,
+    call = match.call(),
+    type = "kaplan-meier",
+    method = "Kaplan-Meier"
+  )
+  if (any(as.integer(out_readSurv$strata) != 1)) {
+    survfit_object$strata <- out_km$strata
   }
+
   class(survfit_object) <- c("survfit")
   if (use.ggsurvfit) {
     if (conf.type == "none" | conf.type == "n" | length(survfit_object$strata)>2) {
@@ -211,11 +200,10 @@ calculateCI <- function(survfit_object, conf.int, conf.type, conf.lower) {
 }
 
 checkDependentPackages <- function() {
-  if (requireNamespace("mets", quietly = TRUE) & requireNamespace("Rcpp", quietly = TRUE)) {
-    suppressWarnings(library(mets))
+  if (requireNamespace("Rcpp", quietly = TRUE)) {
     suppressWarnings(library(Rcpp))
   } else {
-    stop("Required packages 'mets' and/or 'Rcpp' are not installed.")
+    stop("Required package 'Rcpp' are not installed.")
   }
 }
 
@@ -284,7 +272,6 @@ readSurv <- function(formula, data, weights, code.event, code.censoring, subset.
   return(list(t = t, d = d, strata = strata, strata_name = strata_name, w=w))
 }
 
-##############################################################################################################
 createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_present=FALSE, logical_strata=FALSE, na_strata=FALSE) {
   one <- rep(1, n)
   t <- c(1:(n/2), 1:(n/2))
@@ -316,16 +303,13 @@ createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_prese
   return(data.frame(id = 1:n, t = t, epsilon = epsilon, d = d, w = w, strata = strata, subset=subset))
 }
 
-
-##############################################################################################################
-
 cppFunction('
 Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
                                     Rcpp::NumericVector w = Rcpp::NumericVector::create(),
                                     Rcpp::IntegerVector strata = Rcpp::IntegerVector::create(),
-                                    Rcpp::CharacterVector error = Rcpp::CharacterVector::create("greenwood")) {
+                                    std::string error = "greenwood") {
 
-//  Rcpp::Rcout << "Method: " << error[0] << std::endl;
+//  Rcpp::Rcout << "Method: " << error << std::endl;
 
   Rcpp::List km_list;
 
@@ -400,9 +384,9 @@ Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
           }
         }
         if (n_i > d_i) {
-          if (error[0] == "tsiatis") {
+          if (error == "tsiatis") {
             sum_se += (d_i / (n_i * n_i));
-          } else {
+          } else if (error == "greenwood") {
             sum_se += (d_i / (n_i * (n_i - d_i)));
           }
         } else {
@@ -483,9 +467,9 @@ Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
           }
         }
         if (n_i > d_i) {
-          if (error[0] == "tsiatis") {
+          if (error == "tsiatis") {
             sum_se += (d_i / (n_i * n_i));
-          } else {
+          } else if (error == "greenwood") {
             sum_se += (d_i / (n_i * (n_i - d_i)));
           }
         } else {
@@ -578,9 +562,9 @@ Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
             }
           }
           if (n_i > d_i) {
-            if (error[0] == "tsiatis") {
+            if (error == "tsiatis") {
               sum_se += (d_i / (n_i * n_i));
-            } else {
+            } else if (error == "greenwood") {
               sum_se += (d_i / (n_i * (n_i - d_i)));
             }
           } else {
@@ -676,9 +660,9 @@ Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
             }
           }
           if (n_i > d_i) {
-            if (error[0] == "tsiatis") {
+            if (error == "tsiatis") {
               sum_se += (d_i / (n_i * n_i));
-            } else {
+            } else if (error == "greenwood") {
               sum_se += (d_i / (n_i * (n_i - d_i)));
             }
           } else {
@@ -728,3 +712,115 @@ Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
   return km_list;
 }
 ')
+
+
+Surv_ <- function (time, event)
+{
+  if (missing(time))
+    stop("Must have a time argument")
+  if (!is.numeric(time))
+    stop("Time variable is not numeric")
+  if (!is.na(any(time)))
+    warning("Invalid time variable. NA values included")
+  #  if (any(time<0))
+  #    warning("Invalid time variable. Non-negative values included")
+  if (length(event) != length(time))
+    stop("Time and event variables are different lengths")
+  if (missing(event))
+    stop("Must have an event argument")
+  if (is.numeric(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- event
+  } else if (is.logical(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- as.numeric(event)
+    warning("Event variable is logical, converted to numearic")
+  } else if (is.factor(event)) {
+    status <- as.numeric(as.factor(event)) - 1
+    warning("Event variable is a factor, converted to numearic")
+  } else stop("Invalid status value, must be logical or numeric")
+  if (nlevels(as.factor(event)) > 3)
+    warning("Event variable should not have more than three levels")
+  ss <- cbind(time = time, status = status)
+  type <- "right"
+
+  inputAttributes <- list()
+  if (!is.null(attributes(time)))
+    inputAttributes$time <- attributes(time)
+  cname <- dimnames(ss)[[2]]
+  if (length(cname) == 0) {
+    cname <- c("time", "status")
+  }
+  dimnames(ss) <- list(NULL, cname)
+  attr(ss, "type") <- type
+  if (length(inputAttributes) > 0)
+    attr(ss, "inputAttributes") <- inputAttributes
+  class(ss) <- "Surv"
+  ss
+}
+
+Event_ <- function (time, event)
+{
+  if (missing(time))
+    stop("A time argument is required")
+  if (!is.numeric(time))
+    stop("Time variable is not numeric")
+  if (!is.na(any(time)))
+    warning("Invalid time variable. NA values included")
+  #  if (any(time<0))
+  #    warning("Invalid time variable. Non-negative values included")
+  if (length(event) != length(time))
+    stop("Time and event variables are different lengths")
+  if (missing(event))
+    stop("An event argument is required")
+  if (is.numeric(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- event
+  } else if (is.is.logical(event)) {
+    if (!is.na(any(event)))
+      warning("Invalid event variable. NA values included")
+    status <- as.numeric(event)
+    warning("Event variable is logical, converted to numearic")
+  } else if (is.factor(event)) {
+    status <- as.numeric(as.factor(event)) - 1
+    warning("Event variable is a factor, converted to numearic")
+  } else stop("Invalid status value, must be logical or numeric")
+  if (nlevels(as.factor(event)) > 3)
+    warning("Event variable should not have more than three levels")
+  ss <- cbind(time = time, status = status)
+  type <- "right"
+
+  inputAttributes <- list()
+  if (!is.null(attributes(time)))
+    inputAttributes$time <- attributes(time)
+  cname <- dimnames(ss)[[2]]
+  if (length(cname) == 0) {
+    cname <- c("time", "status")
+  }
+  dimnames(ss) <- list(NULL, cname)
+  attr(ss, "type") <- type
+  if (length(inputAttributes) > 0)
+    attr(ss, "inputAttributes") <- inputAttributes
+  class(ss) <- "Event"
+  ss
+}
+
+
+
+#data(diabetes.complications)
+#b <- Surv_(diabetes.complications$t, diabetes.complications$epsilon)
+#print(b[1:30,1:2])
+#print(diabetes.complications$epsilon[1:30])
+#f <- as.factor(diabetes.complications$epsilon)
+#c <- Surv(diabetes.complications$t, f)
+#print(c[1:30,1:2])
+#print(diabetes.complications$epsilon[1:30])
+#diabetes.complications$d <- as.numeric(diabetes.complications$epsilon>0)
+#a <- Surv(diabetes.complications$t, diabetes.complications$d)
+#b <- Surv_(diabetes.complications$t, diabetes.complications$d)
+#identical(a, b)
+
+
