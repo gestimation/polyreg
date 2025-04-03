@@ -422,7 +422,6 @@ Rcpp::List calculateKM_rcpp(Rcpp::NumericVector t, Rcpp::IntegerVector d,
     for (int i = 0; i < u; ++i) {
       double time = unique_times[i];
       double weighted_n_i = 0;
-      double unweighted_n_i = 0;
       for (int j = 0; j < n; ++j) {
         if (t[j] >= time) {
           weighted_n_i += w[j];
