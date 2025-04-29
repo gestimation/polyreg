@@ -1,4 +1,4 @@
-calculateIPCW_new <- function(formula, data, code.censoring, strata_name, specific.time) {
+calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.time) {
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
   special <- c("strata", "cluster", "offset")
@@ -95,7 +95,7 @@ get_surv_old <- function(time.points, time, surv) {
   })
 }
 
-calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.time) {
+calculateIPCW_old <- function(formula, data, code.censoring, strata_name, specific.time) {
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
   special <- c("strata", "cluster", "offset")
