@@ -26,7 +26,7 @@
 #' @param optim.parameter1 numeric A threshold for initial value search in outer loop. Defaults to 1e-5.
 #' @param optim.parameter2 integer Maximum number of iterations. Defaults to 20.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
-#' @param optim.parameter4 numeric A threshold for determining convergencein outer loop. Defaults to 1e-5.
+#' @param optim.parameter4 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter5 integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.
 #' @param optim.parameter6 numeric A threshold for determining convergence in inner loop. Defaults to 1e-10.
 #' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
@@ -36,9 +36,11 @@
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
+#' @importFrom Rcpp sourceCpp
+#' @useDynLib polyreg, .registration = TRUE
 #'
 #' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary meets requirement of msummary function. diagnosis.statistics in includes inverse probability weights, influence functions, and predicted potential outcomes
-#' @export
+#' @export polyreg
 #'
 #' @examples
 #' data(diabetes.complications)

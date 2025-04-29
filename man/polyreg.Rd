@@ -94,7 +94,7 @@ polyreg(
 
 \item{optim.parameter3}{numeric Constraint range for parameters. Defaults to 100.}
 
-\item{optim.parameter4}{numeric A threshold for determining convergencein outer loop. Defaults to 1e-5.}
+\item{optim.parameter4}{numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.}
 
 \item{optim.parameter5}{integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.}
 
