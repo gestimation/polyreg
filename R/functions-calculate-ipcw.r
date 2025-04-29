@@ -24,8 +24,12 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
 #  km2 <- out_predict2$surv[1]
 
   d <- as.integer(epsilon==0)
-  strata <- data[[strata_name]]
-  strata <- as.integer(strata)
+  if (is.null(strata_name)) {
+    strata <- rep(1,nrow(data))
+  } else {
+    strata <- data[[strata_name]]
+    strata <- as.integer(strata)
+  }
   out_km <- calculateKM_rcpp(t=t, d=d, strata=strata, error="none")
   s <- rep(specific.time, length(t))
   km1 <- get_surv(t, out_km$surv, out_km$time, strata, out_km$strata)
@@ -42,8 +46,66 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
   return(ip.weight)
 }
 
+get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.strata = NULL, estimated.strata = NULL) {
+  predicted.surv <- numeric(length(predicted.time))
 
-get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.strata=NULL, estimated.strata=NULL) {
+  if (!is.null(predicted.strata) && length(unique(predicted.strata)) == 1) {
+    predicted.strata <- NULL
+  }
+  if (!is.null(estimated.strata) && length(unique(estimated.strata)) == 1) {
+    estimated.strata <- NULL
+  }
+  if (!is.null(estimated.strata)) {
+    strata_start <- c(1, head(cumsum(estimated.strata), -1) + 1)
+    strata_end <- cumsum(estimated.strata)
+  }
+
+  for (i in seq_along(predicted.time)) {
+    t <- predicted.time[i]
+
+    # strataがNULL、または predicted.strata[i] がNAの場合は共通の方法でサバイバル推定
+    if (is.null(estimated.strata) || is.null(predicted.strata) || is.na(predicted.strata[i])) {
+      time_until_t <- estimated.time[estimated.time < t]
+      if (length(time_until_t) > 0) {
+        time_index <- which.max(time_until_t)
+        predicted.surv[i] <- estimated.surv[time_index]
+      } else {
+        predicted.surv[i] <- 1
+      }
+    } else {
+      strata_index <- predicted.strata[i]
+
+      # strata_index が範囲外でないことをチェック
+      if (!is.na(strata_index) && strata_index > 0 && strata_index <= length(estimated.strata)) {
+        strata_size <- estimated.strata[strata_index]
+
+        if (!is.na(strata_size) && strata_size > 0) {
+          strata_indices <- strata_start[strata_index]:strata_end[strata_index]
+          strata_time <- estimated.time[strata_indices]
+          strata_surv <- estimated.surv[strata_indices]
+
+          time_until_t <- strata_time[strata_time < t]
+
+          if (length(time_until_t) > 0) {
+            time_index <- which.max(time_until_t)
+            predicted.surv[i] <- strata_surv[time_index]
+          } else {
+            predicted.surv[i] <- 1
+          }
+        } else {
+          predicted.surv[i] <- NA
+        }
+      } else {
+        predicted.surv[i] <- NA
+      }
+    }
+  }
+
+  return(predicted.surv)
+}
+
+
+get_surv_old2 <- function(predicted.time, estimated.surv, estimated.time, predicted.strata=NULL, estimated.strata=NULL) {
   predicted.surv <- numeric(length(predicted.time))
   strata_start <- c(1, head(cumsum(estimated.strata), -1) + 1)
   strata_end <- cumsum(estimated.strata)

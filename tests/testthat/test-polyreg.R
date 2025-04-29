@@ -28,7 +28,8 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   tested_coefficient <- round(output$coefficient,digit=3)
   tested_cov <- round(output$cov[1,],digit=3)
   tested <- as.vector(cbind(tested_coefficient,tested_cov))
-  expected <- c(-1.383, -0.300, -3.991, -0.076, 0.016, -0.012, 0.004, -0.004)
+#  expected <- c(-1.383, -0.300, -3.991, -0.076, 0.016, -0.012, 0.004, -0.004)
+  expected <- c(-1.393, -0.301, -4.006, -0.074, 0.016, -0.012, 0.004, -0.004)
   expect_equal(tested, expected)
 })
 
