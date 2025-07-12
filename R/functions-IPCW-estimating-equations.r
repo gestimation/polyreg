@@ -382,6 +382,126 @@ calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
 }
 
 estimating_equation_proportional <- function(
+    formula,
+    data,
+    exposure,
+    ip.weight.matrix,
+    alpha_beta,
+    estimand,
+    time.point,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  cl <- match.call()
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "cluster", "offset")
+  Terms <- terms(formula, special, data = data)
+  mf$formula <- Terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  if (!inherits(Y, c("Event", "Surv"))) {
+    t <- rep(0, length(Y))
+    epsilon <- Y
+  } else {
+    t <- Y[, 1]
+    epsilon <- Y[, 2]
+  }
+  if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
+    ts <- survival::untangle.specials(Terms, "offset")
+    if (length(ts$vars) > 0) {
+      Terms <- Terms[-ts$terms]
+      offset <- mf[[ts$vars]]
+    } else {
+      offset <- rep(0, nrow(mf))
+    }
+  } else {
+    offset <- rep(0, nrow(mf))
+  }
+
+#  y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
+#  y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
+  y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
+  y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
+
+  a_ <- as.factor(data[[exposure]])
+  if (estimand$code.exposure.ref==0) {
+    x_a <- as.matrix(model.matrix(~ a_)[, -1])
+  } else {
+    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
+  }
+  x_l <- model.matrix(Terms, mf)
+  x_la <- cbind(x_l, x_a)
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a,length(time.point))
+
+  one <- rep(1, nrow(x_l))
+  a <- as.vector(x_a)
+  score_beta <- NULL
+  score_alpha1 <- 0
+  score_alpha2 <- 0
+  i_time <- 0
+  alpha_beta_i <- rep(NA, i_parameter[7])
+  for (specific.time in time.point) {
+    i_time <- i_time + 1
+    i_para <- i_parameter[1]*(i_time-1)+1
+    alpha_beta_i[1:i_parameter[1]]              <- alpha_beta[i_para:(i_para+i_parameter[1]-1)]
+    alpha_beta_i[i_parameter[2]:i_parameter[3]] <- alpha_beta[i_parameter[8]/2]
+#    alpha_beta_i[i_parameter[4]:i_parameter[5]] <- alpha_beta[(i_parameter[8]/2+i_para):(i_parameter[8]/2+i_para+i_parameter[1]-1)]
+#    alpha_beta_i[i_parameter[6]:i_parameter[7]] <- alpha_beta[i_parameter[8]]
+
+#    y_0 <- ifelse(epsilon == 0 | t > specific.time, 1, 0)
+#    y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
+#    y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
+    y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
+    y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
+
+#    potential.CIFs <- calculatePotentialCIFs(alpha_beta_i,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialRisk(alpha_beta_i, x_l, offset, estimand)
+    one <- rep(1, nrow(x_l))
+    a <- as.vector(x_a)
+    ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
+    w11 <- 1 / (ey_1 * (1 - ey_1))
+#    wy_1 <- ip.weight * y_1
+    wy_1 <- ip.weight.matrix[,i_time] * y_1
+    wy_1ey_1 <- w11*(wy_1 - ey_1)
+    d <- cbind(x_l, x_a)
+    residual <- wy_1ey_1
+#    ret <- as.vector(t(d) %*% residual / nrow(x_l))
+#    n_col_d <- ncol(d)
+#    score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
+#    for (j in seq_len(n_col_d)) {
+#      score.matrix[,j] <- d[,j]*residual
+#    }
+
+    subscore <- as.vector(t(d) %*% residual / nrow(x_l))
+    tmp1 <- t(subscore[1:i_parameter[1]])
+    score_beta <- cbind(score_beta, tmp1)
+    score_alpha1 <- score_alpha1 + subscore[i_parameter[2]:i_parameter[3]]
+#    tmp1 <- t(subscore[1:i_parameter[1],])
+#    tmp2 <- t(subscore[i_parameter[4]:i_parameter[5],])
+#    score_beta <- cbind(score_beta, tmp1, tmp2)
+#    score_alpha1 <- score_alpha1 + subscore[i_parameter[2]:i_parameter[3],]
+#    score_alpha2 <- score_alpha2 + subscore[i_parameter[6]:i_parameter[7],]
+  }
+#  score <- cbind(score_beta, score_alpha1, score_alpha2)
+  score <- cbind(score_beta, score_alpha1)
+  out <- list(
+    ret   = score,
+    t     = t,
+    y_0   = y_0,
+    y_1   = y_1,
+    y_0_  = y_0_,
+    y_1_  = y_1_,
+    x_a   = x_a,
+    x_l   = x_l,
+    i_parameter = i_parameter
+  )
+  return(out)
+}
+
+estimating_equation_pproportional <- function(
   formula,
   data,
   exposure,

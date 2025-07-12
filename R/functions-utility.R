@@ -12,7 +12,7 @@ Surv <- function(time, event) {
     stop("Must have a time argument")
   if (!is.numeric(time))
     stop("Time variable is not numeric")
-  if (!is.na(any(time)))
+  if (any(is.na(time)))
     warning("Invalid time variable. NA values included")
   #  if (any(time<0))
   #    warning("Invalid time variable. Non-negative values included")
@@ -21,11 +21,11 @@ Surv <- function(time, event) {
   if (missing(event))
     stop("Must have an event argument")
   if (is.numeric(event)) {
-    if (!is.na(any(event)))
+    if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- event
   } else if (is.logical(event)) {
-    if (!is.na(any(event)))
+    if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- as.numeric(event)
     warning("Event variable is logical, converted to numearic")
@@ -58,7 +58,7 @@ Event <- function(time, event) {
     stop("A time argument is required")
   if (!is.numeric(time))
     stop("Time variable is not numeric")
-  if (!is.na(any(time)))
+  if (any(is.na(time)))
     warning("Invalid time variable. NA values included")
   #  if (any(time<0))
   #    warning("Invalid time variable. Non-negative values included")
@@ -67,11 +67,11 @@ Event <- function(time, event) {
   if (missing(event))
     stop("An event argument is required")
   if (is.numeric(event)) {
-    if (!is.na(any(event)))
+    if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- event
-  } else if (is.logical(event)) {
-    if (!is.na(any(event)))
+  } else if (is.is.logical(event)) {
+    if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- as.numeric(event)
     warning("Event variable is logical, converted to numearic")

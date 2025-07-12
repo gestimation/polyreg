@@ -241,24 +241,30 @@ getInitialValues <- function(
   return(init_vals)
 }
 
+
+######## ここを修正
 calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estimand, specific.time, prob.bound) {
-  if (is.null(l)) {
-    # Equivalent to calc_initial_2_competing_risk
-    epsilon0 <- epsilon[a == 0]
-    epsilon1 <- epsilon[a == 1]
-    t0 <- t[a == 0]
-    t1 <- t[a == 1]
 
-    p_10 <- (sum(epsilon0 == estimand$code.event1 & t0 <= specific.time) / length(epsilon0)) + prob.bound
-    p_20 <- (sum(epsilon0 == estimand$code.event2 & t0 <= specific.time) / length(epsilon0)) + prob.bound
-    p_00 <- 1 - p_10 - p_20
-    p_11 <- (sum(epsilon1 == estimand$code.event1 & t1 <= specific.time) / length(epsilon1)) + prob.bound
-    p_21 <- (sum(epsilon1 == estimand$code.event2 & t1 <= specific.time) / length(epsilon1)) + prob.bound
-    p_01 <- 1 - p_11 - p_21
+  ### この部分は常に計算されないとp_10がなくなる
+  #if (is.null(l)) {
+  # Equivalent to calc_initial_2_competing_risk
+  epsilon0 <- epsilon[a == 0]
+  epsilon1 <- epsilon[a == 1]
+  t0 <- t[a == 0]
+  t1 <- t[a == 1]
 
-    alpha_1 <- log((p_10 * p_11) / (p_00 * p_01))
-    alpha_2 <- log((p_20 * p_21) / (p_00 * p_01))
-  } else {
+  p_10 <- (sum(epsilon0 == estimand$code.event1 & t0 <= specific.time) / length(epsilon0)) + prob.bound
+  p_20 <- (sum(epsilon0 == estimand$code.event2 & t0 <= specific.time) / length(epsilon0)) + prob.bound
+  p_00 <- 1 - p_10 - p_20
+  p_11 <- (sum(epsilon1 == estimand$code.event1 & t1 <= specific.time) / length(epsilon1)) + prob.bound
+  p_21 <- (sum(epsilon1 == estimand$code.event2 & t1 <= specific.time) / length(epsilon1)) + prob.bound
+  p_01 <- 1 - p_11 - p_21
+
+  alpha_1 <- log((p_10 * p_11) / (p_00 * p_01))
+  alpha_2 <- log((p_20 * p_21) / (p_00 * p_01))
+  #} else {
+  ### 逆にこっちのほうをif分岐させる
+  if(!is.null(l)){
     # Equivalent to calc_initial_1_competing_risk
     epsilon00 <- epsilon[a == 0 & l == 0]
     epsilon10 <- epsilon[a == 1 & l == 0]

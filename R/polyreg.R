@@ -13,7 +13,7 @@
 #' @param effect.measure1 character Specifies the effect measure for event (RR, OR, SHR).
 #' @param effect.measure2 character Specifies the effect measure for competing risk (RR, OR, SHR).
 #' @param time.point numeric The time point for exposure effects to be estimated.
-#' @param outcome.type character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).
+#' @param outcome.type character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL, PROPORTIONAL and POLY-PROPORTIONAL).
 #' @param conf.level numeric The level for confidence intervals.
 #' @param report.nuisance.parameter logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.
 #' @param report.optim.convergence logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.
@@ -146,6 +146,39 @@ polyreg <- function(
     n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
     n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
     n_para_6 <- length(time.point)*(n_para_5-2) + 2
+#    alpha_beta_0 <- rep(NA, n_para_6)
+    alpha_beta_0 <- rep(NA, n_para_6/2) # initial parameters for event 1 over time points
+    i_time <- sum1 <- sum2 <- 0
+    for (specific.time in time.point) {
+      specific.time <- as.numeric(specific.time)
+      out_getInitialValues <- getInitialValues(
+        formula = nuisance.model,
+        data = sorted_data,
+        exposure = exposure,
+        data.initial.values = data.initial.values,
+        estimand = estimand,
+        specific.time = specific.time,
+        outcome.type = outcome.type,
+        prob.bound = prob.bound
+      )
+      i_time <- i_time + 1
+      i_para <- n_para_1*(i_time-1)+1
+      tmp1 <- out_getInitialValues[1:n_para_1]
+#      tmp2 <- out_getInitialValues[n_para_3:n_para_4]
+      alpha_beta_0[i_para:(i_para+n_para_1-1)]                          <- tmp1
+#      alpha_beta_0[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]  <- tmp2
+      sum1 <- sum1 + out_getInitialValues[n_para_2]
+#      sum2 <- sum2 + out_getInitialValues[n_para_5]
+    }
+    alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
+#    alpha_beta_0[n_para_6]    <- sum2/length(time.point)
+  } else if (outcome.type == 'POLY-PROPORTIONAL') {
+    n_para_1 <- out_normalizeCovariate$n_covariate+1
+    n_para_2 <- out_normalizeCovariate$n_covariate+2
+    n_para_3 <- out_normalizeCovariate$n_covariate+3
+    n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
+    n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
+    n_para_6 <- length(time.point)*(n_para_5-2) + 2
     alpha_beta_0 <- rep(NA, n_para_6) # initial parameters for event 1 and 2 over time points
     i_time <- sum1 <- sum2 <- 0
     for (specific.time in time.point) {
@@ -237,6 +270,21 @@ polyreg <- function(
       out_ipcw <<- out_ipcw
       return(out_ipcw$ret)
     }
+    estimating_equation_pp <- function(p) {
+      out_ipcw <- estimating_equation_pproportional(
+        formula = nuisance.model,
+        data = sorted_data,
+        exposure = exposure,
+        ip.weight.matrix = ip.weight.matrix,
+        alpha_beta = p,
+        estimand = estimand,
+        time.point = time.point,
+        optim.method = optim.method,
+        prob.bound = prob.bound,
+        initial.CIFs = initial.CIFs)
+      out_ipcw <<- out_ipcw
+      return(out_ipcw$ret)
+    }
     setInitialCIFs <- function(new.CIFs) {
       initial.CIFs <<- new.CIFs
     }
@@ -247,6 +295,7 @@ polyreg <- function(
       estimating_equation_i = estimating_equation_i,
       estimating_equation_s = estimating_equation_s,
       estimating_equation_p = estimating_equation_p,
+      estimating_equation_pp = estimating_equation_pp,
       setInitialCIFs = setInitialCIFs,
       getResults = getResults
     )
@@ -381,6 +430,47 @@ polyreg <- function(
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
+  } else if (outcome.type == 'POLY-PROPORTIONAL') {
+    current_params <- alpha_beta_0
+    while ((iteration < optim.parameter2) & (max_param_diff > optim.parameter1)) {
+      iteration <- iteration + 1
+      if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
+        sol <- nleqslv(current_params, obj$estimating_equation_pp, method="Broyden", control=list(maxit=optim.parameter5, allowSingular=FALSE))
+        new_params <- sol$x
+      } else if (outer.optim.method == "Newton"){
+        sol <- nleqslv(current_params, obj$estimating_equation_pp, method="Newton", control=list(maxit=optim.parameter5, allowSingular=FALSE))
+        new_params <- sol$x
+      } else if (outer.optim.method == "multiroot") {
+        sol <- multiroot(obj$estimating_equation_pp, start = current_params, maxiter=optim.parameter5, rtol=optim.parameter4)
+        new_params <- sol$root
+      } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
+        sol <- optim(par = current_params,
+                     fn = function(params) {
+                       sum(obj$estimating_equation_pp(params)^2)
+                     },
+                     method = "SANN",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
+        )
+        new_params <- sol$par
+      } else if (outer.optim.method == "BFGS"){
+        sol <- optim(par = current_params,
+                     fn = function(params) {
+                       sum(obj$estimating_equation_pp(params)^2)
+                     },
+                     method = "BFGS",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
+        )
+        new_params <- sol$par
+      }
+      if (any(abs(new_params) > optim.parameter3)) {
+        stop("Estimates are either too large or too small, and convergence might not be achieved.")
+      }
+      param_diff <- abs(new_params - current_params)
+      max_param_diff   <- max(param_diff)
+      current_params <- new_params
+
+      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+      sol_list[[iteration]] <- sol
+      diff_list[[iteration]] <- max_param_diff
+    }
   }
   out_getResults <- obj$getResults()
 
@@ -428,14 +518,24 @@ polyreg <- function(
   boot.p_value  <- rep(NA,2)
   boot.conf_low <- rep(NA,2)
   boot.conf_high<- rep(NA,2)
-  index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
+  if (outcome.type=='POLY-PROPORTIONAL') {
+    index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
+  } else if (outcome.type=='PROPORTIONAL') {
+    index_coef    <- c(length(time.point) + 1)
+  }
 
-  if (outcome.type=='PROPORTIONAL') {
+  if (outcome.type=='PROPORTIONAL' | outcome.type=='POLY-PROPORTIONAL') {
     set.seed(boot.parameter2)
     if (outcome.type=='PROPORTIONAL') {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                        sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
+        ))
+      }
+    } else if (outcome.type=='POLY-PROPORTIONAL') {
+      boot_function <- function(data, indices) {
+        return(solveEstimatingEquationPP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
+                                        sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
     } else if (outcome.type=='COMPETINGRISK') {
@@ -458,7 +558,7 @@ polyreg <- function(
       }
     }
     out_boot <- boot(sorted_data, boot_function, R = boot.parameter1)
-    for (j in seq_len(2)) {
+    for (j in seq_len(length(index_coef))) {
       if (boot.bca == TRUE) {
         out_boot.ci <- boot.ci(out_boot, conf = conf.level, index = index_coef[j], type = c("norm", "bca"))
         boot.coef[j] <- (out_boot.ci$normal[2] + out_boot.ci$normal[3])/2

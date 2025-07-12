@@ -1,4 +1,3 @@
-
 calculateCI <- function(survfit_object, conf.int, conf.type, conf.lower) {
   if (conf.int <= 0 | conf.int >= 1)
     stop("Confidence level must be between 0 and 1")
