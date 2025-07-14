@@ -162,7 +162,7 @@ calculatePotentialRisk <- function(alpha_beta, x_l, offset, estimand) {
     expphi <- exp(phi)
     exptheta <- exp(theta)
     if (all(phi == 0)) {
-      p_10 <- one / (one + exptheta)
+      p_10 <- one / (one + expphi)
       p_11 <- exptheta * p_10
     } else {
       denomi_1 <- -(exptheta + one) * expphi
