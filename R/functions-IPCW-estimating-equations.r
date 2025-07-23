@@ -1,3 +1,131 @@
+estimating_equation_ipcw_roptim <- function(
+    formula,
+    data,
+    exposure,
+    ip.weight,
+    alpha_beta,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  cl <- match.call()
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "cluster", "offset")
+  Terms <- terms(formula, special, data = data)
+  mf$formula <- Terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  t <- Y[, 1]
+  epsilon <- Y[, 2]
+
+  offset <- if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
+    ts <- survival::untangle.specials(Terms, "offset")
+    if (length(ts$vars) > 0) mf[[ts$vars]] else rep(0, nrow(mf))
+  } else {
+    rep(0, nrow(mf))
+  }
+
+  y_0 <- ifelse(epsilon == estimand$code.censoring | t > estimand$time.point, 1, 0)
+  y_1 <- ifelse(epsilon == estimand$code.event1 & t <= estimand$time.point, 1, 0)
+  y_2 <- ifelse(epsilon == estimand$code.event2 & t <= estimand$time.point, 1, 0)
+  y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
+  y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
+  y_2_ <- ifelse(epsilon == estimand$code.event2, 1, 0)
+
+  a_ <- as.factor(data[[exposure]])
+  x_a <- if (estimand$code.exposure.ref == 0) {
+    as.matrix(model.matrix(~ a_)[, -1])
+  } else {
+    as.matrix(rep(1, length(t)) - model.matrix(~ a_)[, -1])
+  }
+  x_l <- model.matrix(Terms, mf)
+  x_la <- cbind(x_l, x_a)
+
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+
+  alpha_1 <- alpha_beta[i_parameter[1]:i_parameter[2]]
+  beta_1  <- alpha_beta[i_parameter[2]:i_parameter[3]]
+  alpha_2 <- alpha_beta[i_parameter[4]:i_parameter[5]]
+  beta_2  <- alpha_beta[i_parameter[6]:i_parameter[7]]
+
+  alpha_tmp_1_vec <- as.vector(x_l %*% alpha_1 + offset)
+  alpha_tmp_2_vec <- as.vector(x_l %*% alpha_2 + offset)
+  log_p0 <- rep(log(0.2), 4)
+
+  potential.CIFs <- calculatePotentialCIFs_roptim_all(
+    x_l = x_l,
+    log_p0 = log_p0,
+    alpha_tmp_1_vec = alpha_tmp_1_vec,
+    alpha_tmp_2_vec = alpha_tmp_2_vec,
+    beta_tmp_1 = beta_1,
+    beta_tmp_2 = beta_2,
+    effect1 = estimand$effect.measure1,
+    effect2 = estimand$effect.measure2,
+    prob_bound = prob.bound,
+    method = "BFGS",
+    maxit = optim.method$optim.parameter7,
+    reltol = optim.method$optim.parameter6
+  )
+
+  one <- rep(1, nrow(x_l))
+  a <- as.vector(x_a)
+  ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
+  ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
+
+  v11 <- ey_1 * (1 - ey_1)
+  v12 <- -ey_1 * ey_2
+  v22 <- ey_2 * (1 - ey_2)
+  denom <- v11*v22 - v12*v12
+  w11 <- v22 / denom
+  w12 <- -v12 / denom
+  w22 <- v11 / denom
+  wy_1 <- ip.weight * y_1
+  wy_2 <- ip.weight * y_2
+  wy_1ey_1 <- w11*(wy_1 - ey_1) + w12*(wy_2 - ey_2)
+  wy_2ey_2 <- w12*(wy_1 - ey_1) + w22*(wy_2 - ey_2)
+
+  x_la <- cbind(x_l, x_a)
+  zero <- matrix(0, nrow=nrow(x_la), ncol=ncol(x_la))
+  tmp1 <- cbind(x_la, zero)
+  tmp2 <- cbind(zero, x_la)
+  d <- rbind(tmp1, tmp2)
+  residual <- c(wy_1ey_1, wy_2ey_2)
+  ret <- as.vector(t(d) %*% residual / nrow(x_l))
+
+  n_col_d <- ncol(d)
+  score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
+  for (j in seq_len(n_col_d)) {
+    score.matrix[,j] <- d[,j]*residual
+  }
+
+  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
+  out <- list(
+    ret = ret,
+    score = score.matrix,
+    ey_1 = ey_1,
+    ey_2 = ey_2,
+    w11 = w11,
+    w12 = w12,
+    w22 = w22,
+    t = t,
+    y_0 = y_0,
+    y_1 = y_1,
+    y_2 = y_2,
+    y_0_ = y_0_,
+    y_1_ = y_1_,
+    y_2_ = y_2_,
+    x_a = x_a,
+    x_l = x_l,
+    potential.CIFs = potential.CIFs,
+    ip.weight = ip.weight,
+    i_parameter = i_parameter
+  )
+  return(out)
+}
+
 estimating_equation_ipcw <- function(
     formula,
     data,

@@ -68,7 +68,7 @@ polyreg(
 
 \item{time.point}{numeric The time point for exposure effects to be estimated.}
 
-\item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).}
+\item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL, PROPORTIONAL and POLY-PROPORTIONAL).}
 
 \item{conf.level}{numeric The level for confidence intervals.}
 

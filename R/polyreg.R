@@ -22,7 +22,7 @@
 #' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals.
 #' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
 #' @param outer.optim.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
-#' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
+#' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN, roptim).
 #' @param optim.parameter1 numeric A threshold for initial value search in outer loop. Defaults to 1e-5.
 #' @param optim.parameter2 integer Maximum number of iterations. Defaults to 20.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
@@ -229,6 +229,8 @@ polyreg <- function(
     out_ipcw <- list()
     initial.CIFs <- NULL
     estimating_equation_i <- function(p) {
+
+      if (optim.method$inner.optim.method == 'optim' | optim.method$inner.optim.method == 'BFGS') {
       out_ipcw <- estimating_equation_ipcw(
         formula = nuisance.model,
         data = sorted_data,
@@ -239,6 +241,7 @@ polyreg <- function(
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
+      } else
       out_ipcw <<- out_ipcw
       return(out_ipcw$ret)
     }
