@@ -200,6 +200,7 @@ estimating_equation_ipcw <- function(
   tmp1 <- cbind(x_la, zero)
   tmp2 <- cbind(zero, x_la)
   d    <- rbind(tmp1, tmp2)
+
   residual <- c(wy_1ey_1, wy_2ey_2)
   ret <- as.vector(t(d) %*% residual / nrow(x_l))
 
@@ -279,16 +280,13 @@ calculateCov <- function(objget_results, estimand, prob.bound)
       AB2[i_score, i_para] <- AB2[i_score, i_para] + integral2[n]
     }
   }
-
   out_calculateD <- calculateD(potential.CIFs, x_a, x_l, estimand, prob.bound)
   hesse_d11 <- t(x_la) %*% (w11 * out_calculateD$d_11) / n
   hesse_d12 <- t(x_la) %*% (w12 * out_calculateD$d_12) / n
   hesse_d22 <- t(x_la) %*% (w22 * out_calculateD$d_22) / n
-
   hesse_d1 <- cbind(hesse_d11, hesse_d12)
   hesse_d2 <- cbind(hesse_d12, hesse_d22)
   hesse <- rbind(hesse_d1, hesse_d2)
-
   total_score <- cbind(AB1, AB2)
   influence.function <- total_score %*% t(solve(hesse))
   cov_estimated <- t(influence.function) %*% influence.function / n / n

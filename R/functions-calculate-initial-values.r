@@ -519,7 +519,7 @@ checkInput <- function(outcome.type, time.point, conf.level, outer.optim.method,
   if (outcome.type == "SURVIVAL" & outer.optim.method == "partial") {
     stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN' or 'multiroot'.")
   }
-  if (!inner.optim.method %in% c("optim","BFGS","SANN","multiroot")) {
-    stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'multiroot'.")
+  if (!inner.optim.method %in% c("optim","BFGS","SANN","roptim")) {
+    stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'roptim'.")
   }
 }

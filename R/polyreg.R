@@ -229,8 +229,18 @@ polyreg <- function(
     out_ipcw <- list()
     initial.CIFs <- NULL
     estimating_equation_i <- function(p) {
-
-      if (optim.method$inner.optim.method == 'optim' | optim.method$inner.optim.method == 'BFGS') {
+    if (optim.method$inner.optim.method == "roptim") {
+      out_ipcw <- estimating_equation_ipcw_roptim(
+        formula = nuisance.model,
+        data = sorted_data,
+        exposure = exposure,
+        ip.weight = ip.weight,
+        alpha_beta = p,
+        estimand = estimand,
+        optim.method = optim.method,
+        prob.bound = prob.bound,
+        initial.CIFs = initial.CIFs)
+    } else {
       out_ipcw <- estimating_equation_ipcw(
         formula = nuisance.model,
         data = sorted_data,
@@ -241,7 +251,7 @@ polyreg <- function(
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
-      } else
+    }
       out_ipcw <<- out_ipcw
       return(out_ipcw$ret)
     }
