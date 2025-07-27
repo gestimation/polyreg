@@ -1,10 +1,26 @@
 checkDependentPackages <- function() {
-  if (requireNamespace("ggsurvfit", quietly = TRUE) & requireNamespace("Rcpp", quietly = TRUE)) {
-    suppressWarnings(library(ggsurvfit))
-    suppressWarnings(library(Rcpp))
-  } else {
-    stop("Required packages 'ggsurvfit' and/or 'Rcpp' are not installed.")
+  required_pkgs <- c("ggsurvfit", "Rcpp", "nleqslv", "boot", "future", "future.apply")
+  missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+
+  if (length(missing_pkgs) > 0) {
+    stop("Required packages not installed: ", paste(missing_pkgs, collapse = ", "))
   }
+
+  suppressWarnings({
+    library(ggsurvfit)
+    library(Rcpp)
+    library(nleqslv)
+    library(boot)
+    library(future)
+    library(future.apply)
+  })
+
+  # 並列化プランを一度だけ設定（すでに設定済みならそのまま）
+  if (!inherits(future::plan(), "multisession")) {
+    future::plan(multisession)
+  }
+
+  invisible(TRUE)
 }
 
 Surv <- function(time, event) {

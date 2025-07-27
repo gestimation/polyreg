@@ -50,6 +50,7 @@ estimating_equation_ipcw <- function(
   i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a)
 
   potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  #  potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
   ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)

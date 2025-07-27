@@ -78,6 +78,71 @@ calculatePotentialCIFs <- function(
   return(potential.CIFs)
 }
 
+calculatePotentialCIFs_parallel <- function(
+    alpha_beta_tmp,
+    x_a,
+    x_l,
+    offset,
+    epsilon,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+  alpha_1 <- alpha_beta_tmp[1:i_parameter[1]]
+  alpha_tmp_1 <- x_l %*% as.matrix(alpha_1) + offset
+  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
+  alpha_2 <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
+  alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
+  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
+
+  n <- length(epsilon)
+  p0 <- c(
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
+  )
+  log_p0 <- log(p0)
+
+  # 並列処理の本体
+  list.CIFs <- future.apply::future_lapply(seq_len(nrow(x_l)), function(i_x) {
+    # Use the previous prediction value if provided
+    log_p_i <- if (!is.null(initial.CIFs)) log(initial.CIFs[i_x, ]) else log_p0
+
+    eq_fn <- function(lp) {
+      estimating_equation_CIFs(
+        log_p        = lp,
+        alpha_tmp_1  = alpha_tmp_1[i_x],
+        beta_tmp_1   = beta_tmp_1,
+        alpha_tmp_2  = alpha_tmp_2[i_x],
+        beta_tmp_2   = beta_tmp_2,
+        estimand     = estimand,
+        optim.method = optim.method,
+        prob.bound   = prob.bound
+      )
+    }
+
+    method <- 'BFGS'
+    sol <- optim(
+      par     = log_p_i,
+      fn      = eq_fn,
+      method  = method,
+      control = list(
+        maxit  = optim.method$optim.parameter7,
+        reltol = optim.method$optim.parameter6
+      )
+    )
+
+    exp(sol$par)
+  })
+
+  potential.CIFs <- do.call(rbind, list.CIFs)
+  return(potential.CIFs)
+}
+
 estimating_equation_CIFs <- function(
     log_p,
     alpha_tmp_1,

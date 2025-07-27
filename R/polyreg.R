@@ -87,6 +87,7 @@ polyreg <- function(
   #######################################################################################################
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
+  checkDependentPackages()
   checkSpell(outcome.type, effect.measure1, effect.measure2)
   checkInput(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method)
   outcome.type <- outcome.type.corrected
