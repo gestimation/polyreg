@@ -15,8 +15,8 @@ Suggests:
     modelsummary,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-LinkingTo: Rcpp, RcppArmadillo, roptim
-Imports: nleqslv, Rcpp, RcppArmadillo, roptim, boot
+LinkingTo: Rcpp, RcppArmadillo, RcppParallel, roptim
+Imports: nleqslv, boot, Rcpp, RcppArmadillo, RcppParallel, roptim
 VignetteBuilder: knitr
 URL: https://github.com/gestimation/polyreg
 BugReports: https://github.com/gestimation/polyreg/issues

@@ -86,7 +86,7 @@ polyreg(
 
 \item{outer.optim.method}{character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).}
 
-\item{inner.optim.method}{character Specifies the method of optimization (optim, BFGS, SANN).}
+\item{inner.optim.method}{character Specifies the method of optimization (optim, BFGS, SANN, roptim).}
 
 \item{optim.parameter1}{numeric A threshold for initial value search in outer loop. Defaults to 1e-5.}
 

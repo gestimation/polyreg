@@ -1,1 +1,3 @@
 PKG_LIBS = $(shell "$(R_HOME)/bin$(R_ARCH_BIN)/Rscript" -e "cat(nloptr:::nlopt_ldflags())")
+PKG_CPPFLAGS += -fopenmp
+PKG_LIBS += -fopenmp

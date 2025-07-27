@@ -11,6 +11,28 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// calculatePotentialCIFs_parallel
+Rcpp::NumericMatrix calculatePotentialCIFs_parallel(arma::mat x_l, arma::vec log_p0, arma::vec alpha_tmp_1_vec, arma::vec alpha_tmp_2_vec, arma::vec beta_tmp_1, arma::vec beta_tmp_2, std::string effect1, std::string effect2, double prob_bound, std::string method, int maxit, double reltol);
+RcppExport SEXP _polyreg_calculatePotentialCIFs_parallel(SEXP x_lSEXP, SEXP log_p0SEXP, SEXP alpha_tmp_1_vecSEXP, SEXP alpha_tmp_2_vecSEXP, SEXP beta_tmp_1SEXP, SEXP beta_tmp_2SEXP, SEXP effect1SEXP, SEXP effect2SEXP, SEXP prob_boundSEXP, SEXP methodSEXP, SEXP maxitSEXP, SEXP reltolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type x_l(x_lSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type log_p0(log_p0SEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type alpha_tmp_1_vec(alpha_tmp_1_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type alpha_tmp_2_vec(alpha_tmp_2_vecSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type beta_tmp_1(beta_tmp_1SEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type beta_tmp_2(beta_tmp_2SEXP);
+    Rcpp::traits::input_parameter< std::string >::type effect1(effect1SEXP);
+    Rcpp::traits::input_parameter< std::string >::type effect2(effect2SEXP);
+    Rcpp::traits::input_parameter< double >::type prob_bound(prob_boundSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< int >::type maxit(maxitSEXP);
+    Rcpp::traits::input_parameter< double >::type reltol(reltolSEXP);
+    rcpp_result_gen = Rcpp::wrap(calculatePotentialCIFs_parallel(x_l, log_p0, alpha_tmp_1_vec, alpha_tmp_2_vec, beta_tmp_1, beta_tmp_2, effect1, effect2, prob_bound, method, maxit, reltol));
+    return rcpp_result_gen;
+END_RCPP
+}
 // calculatePotentialCIFs_roptim
 arma::vec calculatePotentialCIFs_roptim(arma::vec log_p0, double alpha_tmp_1, arma::vec beta_tmp_1, double alpha_tmp_2, arma::vec beta_tmp_2, std::string effect1, std::string effect2, double prob_bound, std::string method, int maxit, double reltol);
 RcppExport SEXP _polyreg_calculatePotentialCIFs_roptim(SEXP log_p0SEXP, SEXP alpha_tmp_1SEXP, SEXP beta_tmp_1SEXP, SEXP alpha_tmp_2SEXP, SEXP beta_tmp_2SEXP, SEXP effect1SEXP, SEXP effect2SEXP, SEXP prob_boundSEXP, SEXP methodSEXP, SEXP maxitSEXP, SEXP reltolSEXP) {
@@ -30,6 +52,16 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type reltol(reltolSEXP);
     rcpp_result_gen = Rcpp::wrap(calculatePotentialCIFs_roptim(log_p0, alpha_tmp_1, beta_tmp_1, alpha_tmp_2, beta_tmp_2, effect1, effect2, prob_bound, method, maxit, reltol));
     return rcpp_result_gen;
+END_RCPP
+}
+// test_stop_check
+void test_stop_check(arma::vec log_p0);
+RcppExport SEXP _polyreg_test_stop_check(SEXP log_p0SEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec >::type log_p0(log_p0SEXP);
+    test_stop_check(log_p0);
+    return R_NilValue;
 END_RCPP
 }
 // calculatePotentialCIFs_roptim_all
@@ -71,7 +103,9 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_polyreg_calculatePotentialCIFs_parallel", (DL_FUNC) &_polyreg_calculatePotentialCIFs_parallel, 12},
     {"_polyreg_calculatePotentialCIFs_roptim", (DL_FUNC) &_polyreg_calculatePotentialCIFs_roptim, 11},
+    {"_polyreg_test_stop_check", (DL_FUNC) &_polyreg_test_stop_check, 1},
     {"_polyreg_calculatePotentialCIFs_roptim_all", (DL_FUNC) &_polyreg_calculatePotentialCIFs_roptim_all, 12},
     {"_polyreg_calculateKM_rcpp", (DL_FUNC) &_polyreg_calculateKM_rcpp, 5},
     {NULL, NULL, 0}

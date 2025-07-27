@@ -221,6 +221,7 @@ polyreg <- function(
   } else if (outcome.type == 'BINOMIAL') {
     ip.weight <- rep(1,nrow(sorted_data))
   }
+  print("-1")
 
   #######################################################################################################
   # 4. Parameter estimation (functions: estimating_equation_ipcw, _survival, _proportional)
@@ -228,9 +229,10 @@ polyreg <- function(
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
     initial.CIFs <- NULL
+    print("0")
     estimating_equation_i <- function(p) {
-    if (optim.method$inner.optim.method == "roptim") {
-      out_ipcw <- estimating_equation_ipcw_roptim(
+    if (optim.method$inner.optim.method == "future_lapply") {
+      out_ipcw <- estimating_equation_ipcw_future_lapply(
         formula = nuisance.model,
         data = sorted_data,
         exposure = exposure,
@@ -240,7 +242,18 @@ polyreg <- function(
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
-    } else {
+    } else if (optim.method$inner.optim.method == "roptim") {
+        out_ipcw <- estimating_equation_ipcw_roptim(
+          formula = nuisance.model,
+          data = sorted_data,
+          exposure = exposure,
+          ip.weight = ip.weight,
+          alpha_beta = p,
+          estimand = estimand,
+          optim.method = optim.method,
+          prob.bound = prob.bound,
+          initial.CIFs = initial.CIFs)
+      } else {
       out_ipcw <- estimating_equation_ipcw(
         formula = nuisance.model,
         data = sorted_data,

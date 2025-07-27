@@ -83,6 +83,15 @@ arma::vec calculatePotentialCIFs_roptim(
   int maxit = 100,
   double reltol = 1e-8
 ) {
+  Rcpp::warning("✅ calculatePotentialCIFs_roptim called with log_p0 size = %d", log_p0.n_elem);
+
+  if (log_p0.n_elem != 4)
+    Rcpp::stop("log_p0 must be of length 4.");
+  if (beta_tmp_1.n_elem != 1)
+    Rcpp::stop("beta_tmp_1 must be of length 1.");
+  if (beta_tmp_2.n_elem != 1)
+    Rcpp::stop("beta_tmp_2 must be of length 1.");
+
   CIFTask task(alpha_tmp_1, beta_tmp_1, alpha_tmp_2, beta_tmp_2, effect1, effect2, prob_bound);
   roptim::Roptim<CIFTask> opt(method);
   opt.control.maxit = maxit;
@@ -90,6 +99,12 @@ arma::vec calculatePotentialCIFs_roptim(
   opt.control.trace = 1;
   opt.minimize(task, log_p0);
   return log_p0;
+}
+
+// [[Rcpp::export]]
+void test_stop_check(arma::vec log_p0) {
+  if (log_p0.n_elem != 4)
+    Rcpp::stop("log_p0 must be of length 4.");
 }
 
 // [[Rcpp::export]]
@@ -125,3 +140,5 @@ arma::mat calculatePotentialCIFs_roptim_all(
   }
   return arma::exp(results);
 }
+
+
