@@ -398,7 +398,6 @@ calculateInitialValuesSurvival <- function(t, epsilon, a, l = NULL, estimand, sp
   }
 }
 
-
 normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type) {
   mf <- model.frame(formula, data)
   Y <- model.extract(mf, "response")

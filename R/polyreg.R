@@ -36,6 +36,8 @@
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
+#' @importFrom future plan multisession
+#' @importFrom future.apply future_lapply
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib polyreg, .registration = TRUE
 #'
@@ -239,6 +241,7 @@ polyreg <- function(
         estimand = estimand,
         optim.method = optim.method,
         prob.bound = prob.bound,
+        should.sort.data = should.sort.data,
         initial.CIFs = initial.CIFs)
       out_ipcw <<- out_ipcw
       return(out_ipcw$ret)

@@ -78,7 +78,7 @@ calculatePotentialCIFs <- function(
   return(potential.CIFs)
 }
 
-calculatePotentialCIFs_parallel <- function(
+calculatePotentialCIFs_parallel_old <- function(
     alpha_beta_tmp,
     x_a,
     x_l,
@@ -140,6 +140,76 @@ calculatePotentialCIFs_parallel <- function(
   })
 
   potential.CIFs <- do.call(rbind, list.CIFs)
+  return(potential.CIFs)
+}
+
+calculatePotentialCIFs_parallel <- function(
+    alpha_beta_tmp,
+    x_a,
+    x_l,
+    offset,
+    epsilon,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL,
+    batch.size = 10  # 追加：バッチサイズ指定（デフォルト10）
+) {
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+  alpha_1 <- alpha_beta_tmp[1:i_parameter[1]]
+  alpha_tmp_1 <- x_l %*% as.matrix(alpha_1) + offset
+  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
+  alpha_2 <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
+  alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
+  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
+
+  n <- length(epsilon)
+  p0 <- c(
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
+  )
+  log_p0 <- log(p0)
+
+  # バッチ分割
+  indices <- split(seq_len(nrow(x_l)), ceiling(seq_along(seq_len(nrow(x_l))) / batch.size))
+
+  # 並列バッチ処理
+  list.batch.CIFs <- future.apply::future_lapply(indices, function(batch_idx) {
+    lapply(batch_idx, function(i_x) {
+      log_p_i <- if (!is.null(initial.CIFs)) log(initial.CIFs[i_x, ]) else log_p0
+
+      eq_fn <- function(lp) {
+        estimating_equation_CIFs(
+          log_p        = lp,
+          alpha_tmp_1  = alpha_tmp_1[i_x],
+          beta_tmp_1   = beta_tmp_1,
+          alpha_tmp_2  = alpha_tmp_2[i_x],
+          beta_tmp_2   = beta_tmp_2,
+          estimand     = estimand,
+          optim.method = optim.method,
+          prob.bound   = prob.bound
+        )
+      }
+
+      sol <- optim(
+        par     = log_p_i,
+        fn      = eq_fn,
+        method  = "BFGS",  # 固定なら match.arg 不要
+        control = list(
+          maxit  = optim.method$optim.parameter7,
+          reltol = optim.method$optim.parameter6
+        )
+      )
+
+      exp(sol$par)
+    })
+  })
+
+  # ネストしたリストをまとめて行列に変換
+  potential.CIFs <- do.call(rbind, unlist(list.batch.CIFs, recursive = FALSE))
   return(potential.CIFs)
 }
 
