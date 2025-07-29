@@ -1,4 +1,28 @@
-checkDependentPackages <- function() {
+checkDependentPackages <- function(computation.order.method) {
+  required_pkgs <- c("ggsurvfit", "Rcpp", "nleqslv", "boot", "future", "future.apply")
+  missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+
+  if (length(missing_pkgs) > 0) {
+    stop("Required packages not installed: ", paste(missing_pkgs, collapse = ", "))
+  }
+
+  suppressWarnings({
+    library(ggsurvfit)
+    library(Rcpp)
+    library(nleqslv)
+    library(boot)
+    library(future)
+    library(future.apply)
+  })
+
+  if (!inherits(future::plan(), "multisession") & computation.order.method=='PARALLEL') {
+    future::plan(multisession)
+  }
+
+  invisible(TRUE)
+}
+
+checkDependentPackages_old <- function() {
   required_pkgs <- c("ggsurvfit", "Rcpp", "nleqslv", "boot", "future", "future.apply")
   missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
 

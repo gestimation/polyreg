@@ -438,8 +438,8 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
   return(out)
 }
 
-sortByCovariate <- function(formula, data, should.sort.data, n_covariate) {
-  if (should.sort.data == TRUE & n_covariate>0) {
+sortByCovariate <- function(formula, data, optim.method, n_covariate) {
+  if (optim.method$computation.order.method == 'SEQUENTIAL' & n_covariate>0) {
     terms_obj <- terms(formula)
     covariate_names <- attr(terms_obj, "term.labels")
     missing_vars <- setdiff(covariate_names, names(data))

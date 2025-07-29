@@ -21,6 +21,8 @@
 #' @param boot.bca logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).
 #' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals.
 #' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
+#' @param computation.order.method character Specifies the method for computing CIFs (PARALLEL = parallel computation using future.future_lapply, SEQUENTIAL = sequential computation for each covariate level after sorting observations). Defaults to PARALLEL.
+#' @param computation.order.batch.size numeric Batch size for parallel computation. Defaults to NULL.
 #' @param outer.optim.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
 #' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
 #' @param optim.parameter1 numeric A threshold for initial value search in outer loop. Defaults to 1e-5.
@@ -32,7 +34,6 @@
 #' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
 #' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
-#' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
@@ -71,6 +72,8 @@ polyreg <- function(
     boot.bca = TRUE,
     boot.parameter1 = 200,
     boot.parameter2 = 46,
+    computation.order.method = 'PARALLEL',
+    computation.order.batch.size = NULL,
     outer.optim.method = 'nleqslv',
     inner.optim.method = 'optim',
     optim.parameter1 = 1e-5,
@@ -82,14 +85,13 @@ polyreg <- function(
     optim.parameter7 = 200,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
-    should.sort.data = TRUE,
     prob.bound = 1e-5
 ) {
 
   #######################################################################################################
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
-  checkDependentPackages()
+  checkDependentPackages(computation.order.method)
   checkSpell(outcome.type, effect.measure1, effect.measure2)
   checkInput(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method)
   outcome.type <- outcome.type.corrected
@@ -107,6 +109,8 @@ polyreg <- function(
     code.exposure.ref=code.exposure.ref
   )
   optim.method <- list(
+    computation.order.method = computation.order.method,
+    computation.order.batch.size = computation.order.batch.size,
     outer.optim.method = outer.optim.method,
     inner.optim.method = inner.optim.method,
     optim.parameter1 = optim.parameter1,
@@ -119,14 +123,9 @@ polyreg <- function(
   )
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
-#  if (!is.null(subset)) {
-#    subset_condition <- subset
-#    data <- subset(data, eval(parse(text = subset_condition)))
-#  }
-#  data <- na.action(data)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
-  sorted_data <- sortByCovariate(nuisance.model, normalized_data, should.sort.data, out_normalizeCovariate$n_covariate)
+  sorted_data <- sortByCovariate(nuisance.model, normalized_data, optim.method, out_normalizeCovariate$n_covariate)
 
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
