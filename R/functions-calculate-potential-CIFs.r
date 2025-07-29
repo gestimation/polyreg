@@ -1,4 +1,90 @@
-calculatePotentialCIFs <- function(
+calculatePotentialCIFs_parallel <- function(
+    alpha_beta_tmp,
+    x_a,
+    x_l,
+    offset,
+    epsilon,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL,
+    use.parallel = TRUE
+) {
+  # パラメータ
+  i_parameter <- calculateIndexForParameter(NA, x_l, x_a)
+  alpha_1     <- alpha_beta_tmp[1:i_parameter[1]]
+  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
+  alpha_2     <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
+  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
+
+  # 線形予測子
+  alpha_tmp_1 <- x_l %*% alpha_1 + offset
+  alpha_tmp_2 <- x_l %*% alpha_2 + offset
+
+  # 初期log(p)
+  n <- length(epsilon)
+  freq1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
+  freq2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
+  log_p0 <- log(c(freq1, freq2, freq1, freq2))
+
+  # 重複検出（キー作成）
+  x_l_key <- apply(x_l, 1, paste0, collapse = "_")
+  unique_keys <- !duplicated(x_l_key)
+  key_to_index <- match(x_l_key, x_l_key[unique_keys])  # optionally: fastmatch::fmatch()
+
+  # バッチ構成
+  unique_idx <- which(unique_keys)
+  batch.size <- if (!is.null(optim.method$computation.order.batch.size)) {
+    optim.method$computation.order.batch.size
+  } else {
+    cores <- parallel::detectCores()
+    max(10, floor(length(unique_idx) / (cores * 2))) * 2
+  }
+  batch_indices <- split(unique_idx, ceiling(seq_along(unique_idx) / batch.size))
+
+  # CIF計算関数
+  solve_CIF_batch <- function(idx) {
+    matrix(
+      data = unlist(lapply(idx, function(i_x) {
+        log_p_i <- if (is.null(initial.CIFs)) log_p0 else log(initial.CIFs[i_x, ])
+        sol <- optim(
+          par     = log_p_i,
+          fn      = function(lp) estimating_equation_CIFs(
+            log_p       = lp,
+            alpha_tmp_1 = alpha_tmp_1[i_x],
+            beta_tmp_1  = beta_tmp_1,
+            alpha_tmp_2 = alpha_tmp_2[i_x],
+            beta_tmp_2  = beta_tmp_2,
+            estimand    = estimand,
+            prob.bound  = prob.bound
+          ),
+          method  = "BFGS",
+          control = list(
+            maxit  = optim.method$optim.parameter7,
+            reltol = optim.method$optim.parameter6
+          )
+        )
+        exp(sol$par)
+      })),
+      ncol = 4,
+      byrow = TRUE
+    )
+  }
+
+  # 並列 or 逐次実行
+  result_list <- if (use.parallel) {
+    future.apply::future_lapply(batch_indices, solve_CIF_batch, future.seed = TRUE)
+  } else {
+    lapply(batch_indices, solve_CIF_batch)
+  }
+
+  # 結合・復元
+  unique_CIFs <- do.call(rbind, result_list)
+  CIFs_all <- unique_CIFs[key_to_index, , drop = FALSE]
+  return(CIFs_all)
+}
+
+calculatePotentialCIFs_sequential <- function(
     alpha_beta_tmp,
     x_a,
     x_l,
@@ -49,7 +135,6 @@ calculatePotentialCIFs <- function(
           alpha_tmp_2    = alpha_tmp_2[i_x],
           beta_tmp_2     = beta_tmp_2,
           estimand       = estimand,
-          optim.method   = optim.method,
           prob.bound     = prob.bound
         )
       }
@@ -65,7 +150,6 @@ calculatePotentialCIFs <- function(
           alpha_tmp_2    = alpha_tmp_2[i_x],
           beta_tmp_2     = beta_tmp_2,
           estimand       = estimand,
-          optim.method   = optim.method,
           prob.bound     = prob.bound
         )
       }
@@ -89,96 +173,38 @@ calculatePotentialCIFs_parallel_old <- function(
     prob.bound,
     initial.CIFs = NULL
 ) {
-  i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+  # パラメータ分割
+  i_parameter <- calculateIndexForParameter(rep(NA, 7), x_l, x_a)
   alpha_1 <- alpha_beta_tmp[1:i_parameter[1]]
-  alpha_tmp_1 <- x_l %*% as.matrix(alpha_1) + offset
-  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
+  beta_tmp_1 <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
   alpha_2 <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
-  alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
-  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
+  beta_tmp_2 <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
 
-  n <- length(epsilon)
-  p0 <- c(
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound,
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound
-  )
-  log_p0 <- log(p0)
-
-  # 並列処理の本体
-  list.CIFs <- future.apply::future_lapply(seq_len(nrow(x_l)), function(i_x) {
-    # Use the previous prediction value if provided
-    log_p_i <- if (!is.null(initial.CIFs)) log(initial.CIFs[i_x, ]) else log_p0
-
-    eq_fn <- function(lp) {
-      estimating_equation_CIFs(
-        log_p        = lp,
-        alpha_tmp_1  = alpha_tmp_1[i_x],
-        beta_tmp_1   = beta_tmp_1,
-        alpha_tmp_2  = alpha_tmp_2[i_x],
-        beta_tmp_2   = beta_tmp_2,
-        estimand     = estimand,
-        optim.method = optim.method,
-        prob.bound   = prob.bound
-      )
-    }
-
-    method <- 'BFGS'
-    sol <- optim(
-      par     = log_p_i,
-      fn      = eq_fn,
-      method  = method,
-      control = list(
-        maxit  = optim.method$optim.parameter7,
-        reltol = optim.method$optim.parameter6
-      )
-    )
-
-    exp(sol$par)
-  })
-
-  potential.CIFs <- do.call(rbind, list.CIFs)
-  return(potential.CIFs)
-}
-
-calculatePotentialCIFs_parallel <- function(
-    alpha_beta_tmp,
-    x_a,
-    x_l,
-    offset,
-    epsilon,
-    estimand,
-    optim.method,
-    prob.bound,
-    initial.CIFs = NULL,
-    batch.size = 10  # 追加：バッチサイズ指定（デフォルト10）
-) {
-  i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
-  alpha_1 <- alpha_beta_tmp[1:i_parameter[1]]
+  # 線形予測子
   alpha_tmp_1 <- x_l %*% as.matrix(alpha_1) + offset
-  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
-  alpha_2 <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
   alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
-  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
 
+  # log(p0) 初期値
   n <- length(epsilon)
-  p0 <- c(
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound,
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound
-  )
-  log_p0 <- log(p0)
+  p_event1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
+  p_event2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
+  log_p0 <- log(c(p_event1, p_event2, p_event1, p_event2))
 
-  # バッチ分割
-  indices <- split(seq_len(nrow(x_l)), ceiling(seq_along(seq_len(nrow(x_l))) / batch.size))
+  # バッチサイズ決定
+  if (!is.null(optim.method$computation.order.batch.size)) {
+    batch.size <- optim.method$computation.order.batch.size
+  } else {
+    n_cores <- parallel::detectCores()
+    batch.size <- max(10, floor(n / (n_cores * 2)))*2
+  }
 
-  # 並列バッチ処理
-  list.batch.CIFs <- future.apply::future_lapply(indices, function(batch_idx) {
-    lapply(batch_idx, function(i_x) {
+  indices <- split(seq_len(n), ceiling(seq_len(n) / batch.size))
+
+  # バッチ最適化関数（ローカル定義）
+  solve_CIF_batch <- function(batch_idx) {
+    res <- matrix(NA_real_, nrow = length(batch_idx), ncol = 4)
+    for (i in seq_along(batch_idx)) {
+      i_x <- batch_idx[i]
       log_p_i <- if (!is.null(initial.CIFs)) log(initial.CIFs[i_x, ]) else log_p0
 
       eq_fn <- function(lp) {
@@ -189,7 +215,6 @@ calculatePotentialCIFs_parallel <- function(
           alpha_tmp_2  = alpha_tmp_2[i_x],
           beta_tmp_2   = beta_tmp_2,
           estimand     = estimand,
-          optim.method = optim.method,
           prob.bound   = prob.bound
         )
       }
@@ -197,19 +222,38 @@ calculatePotentialCIFs_parallel <- function(
       sol <- optim(
         par     = log_p_i,
         fn      = eq_fn,
-        method  = "BFGS",  # 固定なら match.arg 不要
+        method  = "BFGS",
         control = list(
           maxit  = optim.method$optim.parameter7,
           reltol = optim.method$optim.parameter6
         )
       )
 
-      exp(sol$par)
-    })
-  })
+      res[i, ] <- exp(sol$par)
+    }
+    res
+  }
 
-  # ネストしたリストをまとめて行列に変換
-  potential.CIFs <- do.call(rbind, unlist(list.batch.CIFs, recursive = FALSE))
+  # 並列適用
+  list.batch.CIFs <- future.apply::future_lapply(
+    indices,
+    FUN = solve_CIF_batch,
+    future.seed = TRUE,
+    future.scheduling = Inf,
+    future.globals = list(
+      alpha_tmp_1 = alpha_tmp_1,
+      alpha_tmp_2 = alpha_tmp_2,
+      beta_tmp_1  = beta_tmp_1,
+      beta_tmp_2  = beta_tmp_2,
+      log_p0      = log_p0,
+      initial.CIFs = initial.CIFs,
+      estimand    = estimand,
+      prob.bound  = prob.bound,
+      optim.method = optim.method
+    )
+  )
+
+  potential.CIFs <- do.call(rbind, list.batch.CIFs)
   return(potential.CIFs)
 }
 
@@ -220,7 +264,6 @@ estimating_equation_CIFs <- function(
     alpha_tmp_2,
     beta_tmp_2,
     estimand,
-    optim.method,
     prob.bound
 ) {
   objective_function <- function(log_p) {
@@ -328,4 +371,155 @@ calculatePotentialRisk <- function(alpha_beta, x_l, offset, estimand) {
   return(cbind(p_10, p_11))
 }
 
+calculatePotentialCIFs_parallel_old <- function(
+    alpha_beta_tmp,
+    x_a,
+    x_l,
+    offset,
+    epsilon,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+  alpha_1 <- alpha_beta_tmp[1:i_parameter[1]]
+  alpha_tmp_1 <- x_l %*% as.matrix(alpha_1) + offset
+  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
+  alpha_2 <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
+  alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
+  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
+
+  n <- length(epsilon)
+  p0 <- c(
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
+  )
+  log_p0 <- log(p0)
+
+  # バッチサイズ決定
+  if (!is.null(optim.method$computation.order.batch.size)) {
+    batch.size <- optim.method$computation.order.batch.size
+  } else {
+    n_cores <- parallel::detectCores()
+    batch.size <- max(10, floor(n / (n_cores * 2)))*2
+  }
+  indices <- split(seq_len(nrow(x_l)), ceiling(seq_along(seq_len(nrow(x_l))) / batch.size))
+
+  # 並列バッチ処理
+  list.batch.CIFs <- future.apply::future_lapply(indices, function(batch_idx) {
+    lapply(batch_idx, function(i_x) {
+      log_p_i <- if (!is.null(initial.CIFs)) log(initial.CIFs[i_x, ]) else log_p0
+
+      eq_fn <- function(lp) {
+        estimating_equation_CIFs(
+          log_p        = lp,
+          alpha_tmp_1  = alpha_tmp_1[i_x],
+          beta_tmp_1   = beta_tmp_1,
+          alpha_tmp_2  = alpha_tmp_2[i_x],
+          beta_tmp_2   = beta_tmp_2,
+          estimand     = estimand,
+          prob.bound   = prob.bound
+        )
+      }
+
+      sol <- optim(
+        par     = log_p_i,
+        fn      = eq_fn,
+        method  = "BFGS",  # 固定なら match.arg 不要
+        control = list(
+          maxit  = optim.method$optim.parameter7,
+          reltol = optim.method$optim.parameter6
+        )
+      )
+
+      exp(sol$par)
+    })
+  })
+
+  # ネストしたリストをまとめて行列に変換
+  potential.CIFs <- do.call(rbind, unlist(list.batch.CIFs, recursive = FALSE))
+  return(potential.CIFs)
+}
+
+calculatePotentialCIFs_sequential_old <- function(
+    alpha_beta_tmp,
+    x_a,
+    x_l,
+    offset,
+    epsilon,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a)
+  alpha_1 <- alpha_beta_tmp[1:i_parameter[1]]
+  alpha_tmp_1 <- x_l %*% as.matrix(alpha_1) + offset
+  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
+  alpha_2 <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
+  alpha_tmp_2 <- x_l %*% as.matrix(alpha_2) + offset
+  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
+
+  n <- length(epsilon)
+  p0 <- c(
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
+  )
+  log_p0 <- log(p0)
+  list.CIFs <- vector("list", nrow(x_l))
+  previous.CIFs <- NULL
+  for (i_x in seq_len(nrow(x_l))) {
+    # Skip the calculation if the current observation is the same as the previous one
+    if (!is.null(previous.CIFs) && all(x_l[i_x, ] == x_l[i_x-1, ])) {
+      list.CIFs[[i_x]] <- previous.CIFs
+      next
+    }
+
+    # Use the previous prediction value of observation i_x if initial.CIFs is not NULL
+    if (!is.null(initial.CIFs)) {
+      log_p0 <- log(initial.CIFs[i_x, ])
+    }
+
+    if (optim.method$inner.optim.method == 'optim' | optim.method$inner.optim.method == 'BFGS') {
+      eq_fn <- function(lp) {
+        estimating_equation_CIFs(
+          log_p          = lp,
+          alpha_tmp_1    = alpha_tmp_1[i_x],
+          beta_tmp_1     = beta_tmp_1,
+          alpha_tmp_2    = alpha_tmp_2[i_x],
+          beta_tmp_2     = beta_tmp_2,
+          estimand       = estimand,
+          prob.bound     = prob.bound
+        )
+      }
+      sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS", control = list(maxit=optim.method$optim.parameter7, reltol=optim.method$optim.parameter6))
+      list.CIFs[[i_x]] <- exp(sol$par)
+      previous.CIFs <- list.CIFs[[i_x]]
+    } else if (optim.method$inner.optim.method == 'SANN') {
+      eq_fn <- function(lp) {
+        estimating_equation_CIFs(
+          log_p          = lp,
+          alpha_tmp_1    = alpha_tmp_1[i_x],
+          beta_tmp_1     = beta_tmp_1,
+          alpha_tmp_2    = alpha_tmp_2[i_x],
+          beta_tmp_2     = beta_tmp_2,
+          estimand       = estimand,
+          prob.bound     = prob.bound
+        )
+      }
+      sol <- optim(par = log_p0, fn = eq_fn, method = "SANN", control = list(maxit=optim.method$optim.parameter7, reltol=optim.method$optim.parameter6))
+      list.CIFs[[i_x]] <- exp(sol$par)
+      previous.CIFs <- list.CIFs[[i_x]]
+    }
+  }
+  potential.CIFs <- do.call(rbind, list.CIFs)
+  return(potential.CIFs)
+}
 
