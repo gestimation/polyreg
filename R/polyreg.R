@@ -221,7 +221,6 @@ polyreg <- function(
   } else if (outcome.type == 'BINOMIAL') {
     ip.weight <- rep(1,nrow(sorted_data))
   }
-  print("-1")
 
   #######################################################################################################
   # 4. Parameter estimation (functions: estimating_equation_ipcw, _survival, _proportional)
@@ -229,7 +228,6 @@ polyreg <- function(
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
     initial.CIFs <- NULL
-    print("0")
     estimating_equation_i <- function(p) {
     if (optim.method$inner.optim.method == "future_lapply") {
       out_ipcw <- estimating_equation_ipcw_future_lapply(
