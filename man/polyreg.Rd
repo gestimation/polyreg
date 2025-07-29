@@ -26,6 +26,8 @@ polyreg(
   boot.bca = TRUE,
   boot.parameter1 = 200,
   boot.parameter2 = 46,
+  computation.order.method = "PARALLEL",
+  computation.order.batch.size = NULL,
   outer.optim.method = "nleqslv",
   inner.optim.method = "optim",
   optim.parameter1 = 1e-05,
@@ -37,7 +39,6 @@ polyreg(
   optim.parameter7 = 200,
   data.initial.values = NULL,
   should.normalize.covariate = TRUE,
-  should.sort.data = TRUE,
   prob.bound = 1e-05
 )
 }
@@ -68,7 +69,7 @@ polyreg(
 
 \item{time.point}{numeric The time point for exposure effects to be estimated.}
 
-\item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL and PROPORTIONAL).}
+\item{outcome.type}{character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL, PROPORTIONAL and POLY-PROPORTIONAL).}
 
 \item{conf.level}{numeric The level for confidence intervals.}
 
@@ -83,6 +84,10 @@ polyreg(
 \item{boot.parameter1}{integer Number of replications for bootstrap confidence intervals.}
 
 \item{boot.parameter2}{numeric Seed used for bootstrap confidence intervals.}
+
+\item{computation.order.method}{character Specifies the method for computing CIFs (PARALLEL = parallel computation using future.future_lapply, SEQUENTIAL = sequential computation for each covariate level after sorting observations). Defaults to PARALLEL.}
+
+\item{computation.order.batch.size}{numeric Batch size for parallel computation. Defaults to NULL.}
 
 \item{outer.optim.method}{character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).}
 
@@ -103,8 +108,6 @@ polyreg(
 \item{optim.parameter7}{integer Maximum number of iterations for optim in inner loop. Defaults to 200.}
 
 \item{should.normalize.covariate}{logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.}
-
-\item{should.sort.data}{logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.}
 
 \item{prob.bound}{numeric A threshold for clamping probabilities. Defaults to 1e-5.}
 
