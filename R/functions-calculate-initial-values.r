@@ -103,9 +103,7 @@ createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, 
   return(na.action(analysis_dataset))
 }
 
-getInitialValues <- function(
-    formula, data, exposure, data.initial.values, estimand, specific.time, outcome.type, prob.bound
-) {
+getInitialValues <- function(formula, data, exposure, data.initial.values, estimand, specific.time, outcome.type, prob.bound) {
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
   special <- c("strata", "cluster", "offset")
@@ -116,8 +114,8 @@ getInitialValues <- function(
   Y <- model.extract(mf, "response")
 
   if (!inherits(Y, c("Event", "Surv"))) {
-    if (outcome.type %in% c('COMPETINGRISK', 'SURVIVAL', 'PROPORTIONAL')) {
-      stop("Expected a 'Surv' or 'Event'-object when outcome.type is COMPETINGRISK, SURVIVAL or PROPORTIONAL. ")
+    if (outcome.type %in% c('COMPETINGRISK', 'SURVIVAL', 'PROPORTIONAL', 'POLY-PROPORTIONAL')) {
+      stop("Expected a 'Surv' or 'Event'-object when outcome.type is COMPETINGRISK, SURVIVAL, PROPORTIONAL or POLY-PROPORTIONAL. ")
     } else {
       t <- rep(0, length(Y))
       epsilon <- Y
@@ -241,13 +239,62 @@ getInitialValues <- function(
   return(init_vals)
 }
 
+getInitialValuesPP <- function(formula, data, exposure, data.initial.values, estimand, outcome.type, prob.bound, out_normalizeCovariate) {
+  cl <- match.call()
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "cluster", "offset")
+  Terms <- terms(formula, special, data = data)
+  mf$formula <- Terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  if (!inherits(Y, c("Event", "Surv")))
+    stop("Expected a 'Surv' or 'Event'-object")
+  if (ncol(Y) == 2) {
+    t <- Y[, 1]
+    epsilon <- Y[, 2]
+  }
+  if (is.null(estimand$time.point)) {
+    time.point <- with(data, t[epsilon > 0])
+    time.point <- unique(time.point)
+  } else {
+    time.point <- estimand$time.point
+  }
+  n_para_1 <- out_normalizeCovariate$n_covariate+1
+  n_para_2 <- out_normalizeCovariate$n_covariate+2
+  n_para_3 <- out_normalizeCovariate$n_covariate+3
+  n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
+  n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
+  n_para_6 <- length(time.point)*(n_para_5-2) + 2
+  alpha_beta_0 <- rep(NA, n_para_6) # initial parameters for event 1 and 2 over time points
+  i_time <- sum1 <- sum2 <- 0
+  for (specific.time in time.point) {
+    specific.time <- as.numeric(specific.time)
+    out_getInitialValues <- getInitialValues(
+      formula = formula,
+      data = data,
+      exposure = exposure,
+      data.initial.values = data.initial.values,
+      estimand = estimand,
+      specific.time = specific.time,
+      outcome.type = outcome.type,
+      prob.bound = prob.bound
+    )
+    i_time <- i_time + 1
+    i_para <- n_para_1*(i_time-1)+1
+    tmp1 <- out_getInitialValues[1:n_para_1]
+    tmp2 <- out_getInitialValues[n_para_3:n_para_4]
+    alpha_beta_0[i_para:(i_para+n_para_1-1)]                          <- tmp1
+    alpha_beta_0[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]  <- tmp2
+    sum1 <- sum1 + out_getInitialValues[n_para_2]
+    sum2 <- sum2 + out_getInitialValues[n_para_5]
+  }
+  alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
+  alpha_beta_0[n_para_6]    <- sum2/length(time.point)
+  return(alpha_beta_0)
+}
 
-######## ここを修正
 calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estimand, specific.time, prob.bound) {
-
-  ### この部分は常に計算されないとp_10がなくなる
-  #if (is.null(l)) {
-  # Equivalent to calc_initial_2_competing_risk
   epsilon0 <- epsilon[a == 0]
   epsilon1 <- epsilon[a == 1]
   t0 <- t[a == 0]
@@ -262,10 +309,7 @@ calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estiman
 
   alpha_1 <- log((p_10 * p_11) / (p_00 * p_01))
   alpha_2 <- log((p_20 * p_21) / (p_00 * p_01))
-  #} else {
-  ### 逆にこっちのほうをif分岐させる
   if(!is.null(l)){
-    # Equivalent to calc_initial_1_competing_risk
     epsilon00 <- epsilon[a == 0 & l == 0]
     epsilon10 <- epsilon[a == 1 & l == 0]
     epsilon01 <- epsilon[a == 0 & l == 1]
@@ -294,7 +338,6 @@ calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estiman
     alpha_21 <- log((p_201 * p_211) / (p_000 * p_011)) - alpha_20
   }
 
-  # Compute beta values
   if (estimand$effect.measure1 == 'RR') {
     beta_1 <- log(p_11 / p_10)
   } else if (estimand$effect.measure1 == 'OR') {
@@ -320,13 +363,11 @@ calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estiman
   } else {
     cbind(alpha_10, alpha_11, beta_1, alpha_20, alpha_21, beta_2)
   }
-
   return(alpha_beta)
 }
 
 calculateInitialValuesSurvival <- function(t, epsilon, a, l = NULL, estimand, specific.time, prob.bound) {
   if (is.null(l)) {
-    # Use calc_initial_2_survival logic
     epsilon0 <- epsilon[a == 0]
     epsilon1 <- epsilon[a == 1]
     t0 <- t[a == 0]
@@ -349,7 +390,6 @@ calculateInitialValuesSurvival <- function(t, epsilon, a, l = NULL, estimand, sp
     alpha_1 <- log((p_10 * p_11) / (p_00 * p_01))
     return(cbind(alpha_1, beta_1))
   } else {
-    # Use calc_initial_1_survival logic
     epsilon00 <- epsilon[a == 0 & l == 0]
     epsilon10 <- epsilon[a == 1 & l == 0]
     epsilon01 <- epsilon[a == 0 & l == 1]
@@ -397,7 +437,6 @@ calculateInitialValuesSurvival <- function(t, epsilon, a, l = NULL, estimand, sp
     return(cbind(alpha_10, alpha_11, beta_1))
   }
 }
-
 
 normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type) {
   mf <- model.frame(formula, data)
@@ -466,12 +505,14 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
     outcome.type.corrected <<- "COMPETINGRISK"
   } else if (outcome.type %in% c("SURVIVAL", "S", "Survival", "Survival")) {
     outcome.type.corrected <<- "SURVIVAL"
+  } else if (outcome.type %in% c("POLY-PROPORTIONAL", "PP", "Poly-proportional", "poly-proportional")) {
+    outcome.type.corrected <<- "POLY-PROPORTIONAL"
   } else if (outcome.type %in% c("PROPORTIONAL", "P", "Proportional", "proportional")) {
     outcome.type.corrected <<- "PROPORTIONAL"
   } else if (outcome.type %in% c("BINOMIAL", "B", "Binomial", "binomial")) {
     outcome.type.corrected <<- "BINOMIAL"
   } else {
-    stop("Invalid input for outcome.type, Choose 'COMPETINGRISK', 'SURVIVAL', 'BINOMIAL', or 'PROPORTIONAL'.")
+    stop("Invalid input for outcome.type, Choose 'COMPETINGRISK', 'SURVIVAL', 'BINOMIAL', 'PROPORTIONAL', or 'POLY-PROPORTIONAL'.")
   }
   if (effect.measure1 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
     effect.measure1.corrected <<- "RR"
@@ -488,28 +529,26 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   } else if (effect.measure2 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
     effect.measure2.corrected <<- "OR"
   } else if (effect.measure2 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
-                                 "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
+                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
     effect.measure2.corrected <<- "SHR"
   } else {
     stop("Invalid input for effect.measure2, Choose 'RR', 'OR', or 'SHR'.")
   }
 }
 
-checkInput <- function(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method) {
-  if ((outcome.type == "COMPETINGRISK" | outcome.type == "SURVIVAL") & length(time.point)>1) {
-    time.point.corrected <<- max(time.point)
-  } else if (is.null(time.point)) {
-    stop("Invalid input for time.point when outcome.type is COMPETINGRISK or SURVIVAL.")
-  } else if (min(time.point)<0) {
-    stop("time.point should be positive when outcome.type is COMPETINGRISK or SURVIVAL.")
+checkInput <- function(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
+  if (outcome.type == "COMPETINGRISK" | outcome.type == "SURVIVAL") {
+    if (length(time.point)>1) {
+      time.point <<- max(time.point)
+    } else if (is.null(time.point)) {
+      stop("Invalid input for time.point when outcome.type is COMPETINGRISK or SURVIVAL.")
+    } else if (min(time.point)<0) {
+      stop("time.point should be positive when outcome.type is COMPETINGRISK or SURVIVAL.")
+    }
+  } else if (outcome.type == "BINOMIAL") {
+    time.point.corrected <<- Inf
   } else {
     time.point.corrected <<- time.point
-  }
-  if (outcome.type == "PROPORTIONAL" & length(time.point)==1) {
-    outcome.type.corrected <<- "COMPETINGRISK"
-  }
-  if (outcome.type == "BINOMIAL") {
-    time.point.corrected <<- Inf
   }
   if (conf.level <= 0 | conf.level >= 1)
     stop("Confidence level must be between 0 and 1")
@@ -521,5 +560,12 @@ checkInput <- function(outcome.type, time.point, conf.level, outer.optim.method,
   }
   if (!inner.optim.method %in% c("optim","BFGS","SANN","multiroot")) {
     stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'multiroot'.")
+  }
+  if (is.null(report.boot.conf) & (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL')) {
+    report.boot.conf.corrected <<- TRUE
+  } else if (is.null(report.boot.conf)) {
+    report.boot.conf.corrected <<- FALSE
+  } else {
+    report.boot.conf.corrected <<- report.boot.conf
   }
 }

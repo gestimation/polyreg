@@ -3,18 +3,14 @@ solveEstimatingEquationP <- function(
     exposure,
     strata,
     sorted_data,
-    estimand = estimand,
-    optim.method = optim.method,
+    estimand,
+    out_normalizeCovariate,
+    optim.method,
     data.initial.values,
     prob.bound = 1e-5
 ) {
   outcome.type <- 'PROPORTIONAL'
-  i_time <- 0
-  ip.weight.matrix <- matrix(NA, nrow=nrow(sorted_data), ncol=length(estimand$time.point))
-  for (specific.time in estimand$time.point) {
-    i_time <- i_time + 1
-    ip.weight.matrix[,i_time] <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=estimand$code.censoring, strata=strata, specific.time = specific.time)
-  }
+  ip.weight.matrix <- calculateIPCWMatrix(nuisance.model, sorted_data, estimand$code.censoring, strata, estimand, out_normalizeCovariate)
 
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
@@ -27,7 +23,6 @@ solveEstimatingEquationP <- function(
         ip.weight.matrix = ip.weight.matrix,
         alpha_beta = p,
         estimand = estimand,
-        time.point = estimand$time.point,
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
@@ -98,18 +93,14 @@ solveEstimatingEquationPP <- function(
     exposure,
     strata,
     sorted_data,
-    estimand = estimand,
-    optim.method = optim.method,
+    estimand,
+    out_normalizeCovariate,
+    optim.method,
     data.initial.values,
     prob.bound = 1e-5
 ) {
   outcome.type <- 'POLY-PROPORTIONAL'
-  i_time <- 0
-  ip.weight.matrix <- matrix(NA, nrow=nrow(sorted_data), ncol=length(estimand$time.point))
-  for (specific.time in estimand$time.point) {
-    i_time <- i_time + 1
-    ip.weight.matrix[,i_time] <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=estimand$code.censoring, strata=strata, specific.time = specific.time)
-  }
+  ip.weight.matrix <- calculateIPCWMatrix(nuisance.model, sorted_data, estimand$code.censoring, strata, estimand, out_normalizeCovariate)
 
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
@@ -122,7 +113,6 @@ solveEstimatingEquationPP <- function(
         ip.weight.matrix = ip.weight.matrix,
         alpha_beta = p,
         estimand = estimand,
-        time.point = estimand$time.point,
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
@@ -277,7 +267,6 @@ solveEstimatingEquationC <- function(
   return(current_params)
 }
 
-
 solveEstimatingEquationS <- function(
     nuisance.model,
     exposure,
@@ -365,8 +354,6 @@ solveEstimatingEquationS <- function(
   }
   return(current_params)
 }
-
-
 
 solveEstimatingEquationB <- function(
     nuisance.model,

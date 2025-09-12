@@ -388,7 +388,6 @@ estimating_equation_proportional <- function(
     ip.weight.matrix,
     alpha_beta,
     estimand,
-    time.point,
     optim.method,
     prob.bound,
     initial.CIFs = NULL
@@ -419,9 +418,13 @@ estimating_equation_proportional <- function(
   } else {
     offset <- rep(0, nrow(mf))
   }
+  if (is.null(estimand$time.point)) {
+    time.point <- with(data, t[epsilon > 0])
+    time.point <- unique(time.point)
+  } else {
+    time.point <- estimand$time.point
+  }
 
-#  y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
-#  y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
   y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
   y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
 
@@ -448,12 +451,6 @@ estimating_equation_proportional <- function(
     i_para <- i_parameter[1]*(i_time-1)+1
     alpha_beta_i[1:i_parameter[1]]              <- alpha_beta[i_para:(i_para+i_parameter[1]-1)]
     alpha_beta_i[i_parameter[2]:i_parameter[3]] <- alpha_beta[i_parameter[8]/2]
-#    alpha_beta_i[i_parameter[4]:i_parameter[5]] <- alpha_beta[(i_parameter[8]/2+i_para):(i_parameter[8]/2+i_para+i_parameter[1]-1)]
-#    alpha_beta_i[i_parameter[6]:i_parameter[7]] <- alpha_beta[i_parameter[8]]
-
-#    y_0 <- ifelse(epsilon == 0 | t > specific.time, 1, 0)
-#    y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
-#    y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
@@ -508,7 +505,6 @@ estimating_equation_pproportional <- function(
   ip.weight.matrix,
   alpha_beta,
   estimand,
-  time.point,
   optim.method,
   prob.bound,
   initial.CIFs = NULL
@@ -533,6 +529,12 @@ estimating_equation_pproportional <- function(
     }
   } else {
     offset <- rep(0, nrow(mf))
+  }
+  if (is.null(estimand$time.point)) {
+    time.point <- with(data, t[epsilon > 0])
+    time.point <- unique(time.point)
+  } else {
+    time.point <- estimand$time.point
   }
 
   y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)

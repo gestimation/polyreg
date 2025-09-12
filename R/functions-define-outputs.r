@@ -7,24 +7,19 @@ getCoef <- function(
     conf.level) {
   alpha <- 1 - conf.level
   critical_value <- qnorm(1 - alpha / 2)
-  if (report.boot.conf == FALSE) {
+  if (report.boot.conf == TRUE) {
+    coef <- out_bootstrap$boot.coef[index]
+    coef_se <- out_bootstrap$boot.coef_se[index]
+    conf_low <- out_bootstrap$boot.conf_low[index]
+    conf_high <- out_bootstrap$boot.conf_high[index]
+    p_value <- out_bootstrap$boot.p_value[index]
+  } else {
     coef <- alpha_beta_estimated[index]
     coef_se <- sqrt(diag(cov_estimated)[index])
     conf_low <- coef - critical_value * coef_se
     conf_high <- coef + critical_value * coef_se
     p_value <- 2 * (1 - pnorm(abs(coef) / coef_se))
-  } else {
-    coef <- out_bootstrap$boot.coef
-    coef_se <- out_bootstrap$boot.coef_se
-    conf_low <- out_bootstrap$boot.conf_low
-    conf_high <- out_bootstrap$boot.conf_high
-    p_value <- out_bootstrap$boot.p_value
   }
-  coef <- alpha_beta_estimated[index]
-  coef_se <- sqrt(diag(cov_estimated)[index])
-  conf_low <- coef - critical_value * coef_se
-  conf_high <- coef + critical_value * coef_se
-  p_value <- 2 * (1 - pnorm(abs(coef) / coef_se))
   list(coef = coef, coef_se = coef_se, conf_low = conf_low, conf_high = conf_high, p_value = p_value)
 }
 
@@ -48,7 +43,6 @@ tidy_df <- function(coef, text) {
     conf.high = coef$conf_high
   )
 }
-
 
 glance_df <- function(
     report.optim.convergence, effect_text, events, exposed_events, unexposed_events, median_followup, param_len, iteration, max.estimate.difference, max.function.value, n.solver.iteration, message) {
@@ -203,7 +197,7 @@ reportEffects <- function(outcome.type,
   return(tg)
 }
 
-reportProportional <- function(nuisance.model,
+reportConstantEffects <- function(nuisance.model,
                                exposure,
                                estimand,
                                out_bootstrap,
@@ -212,6 +206,7 @@ reportProportional <- function(nuisance.model,
                                param_diff,
                                sol,
                                outer.optim.method) {
+  if (is.null(out_bootstrap)) return(NULL)
 
   i_parameter <- out_getResults$i_parameter
   coef1 <- list(coef = out_bootstrap$boot.coef[1], coef_se = out_bootstrap$boot.coef_se[1], conf_low = out_bootstrap$boot.conf_low[1], conf_high = out_bootstrap$boot.conf_high[1], p_value = out_bootstrap$boot.p_value[1])
@@ -266,7 +261,6 @@ reportProportional <- function(nuisance.model,
                          "-")
     )
   )
-
   class(tg$event1) <- class(tg$event2) <- "modelsummary_list"
   return(tg)
 }

@@ -19,7 +19,7 @@
 #' @param report.optim.convergence logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.
 #' @param report.boot.conf logical Specifies contents of return. (TRUE = report bootstrap confidence intervals, FALSE = otherwise). Defaults to FALSE.
 #' @param boot.bca logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).
-#' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals.
+#' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals. Defaults to 200.
 #' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
 #' @param outer.optim.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
 #' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
@@ -65,7 +65,7 @@ polyreg <- function(
     conf.level = 0.95,
     report.nuisance.parameter = FALSE,
     report.optim.convergence = FALSE,
-    report.boot.conf = FALSE,
+    report.boot.conf = NULL,
     boot.bca = TRUE,
     boot.parameter1 = 200,
     boot.parameter2 = 46,
@@ -80,7 +80,7 @@ polyreg <- function(
     optim.parameter7 = 200,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
-    should.sort.data = TRUE,
+    should.sort.data = FALSE,
     prob.bound = 1e-5
 ) {
 
@@ -88,11 +88,12 @@ polyreg <- function(
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
   checkSpell(outcome.type, effect.measure1, effect.measure2)
-  checkInput(outcome.type, time.point, conf.level, outer.optim.method, inner.optim.method)
+  checkInput(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
   outcome.type <- outcome.type.corrected
   effect.measure1 <- effect.measure1.corrected
   effect.measure2 <- effect.measure2.corrected
   time.point <- time.point.corrected
+  report.boot.conf <- report.boot.conf.corrected
 
   estimand <- list(
     effect.measure1=effect.measure1,
@@ -116,11 +117,11 @@ polyreg <- function(
   )
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
-#  if (!is.null(subset)) {
-#    subset_condition <- subset
-#    data <- subset(data, eval(parse(text = subset_condition)))
-#  }
-#  data <- na.action(data)
+  #  if (!is.null(subset)) {
+  #    subset_condition <- subset
+  #    data <- subset(data, eval(parse(text = subset_condition)))
+  #  }
+  #  data <- na.action(data)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
   sorted_data <- sortByCovariate(nuisance.model, normalized_data, should.sort.data, out_normalizeCovariate$n_covariate)
@@ -146,7 +147,7 @@ polyreg <- function(
     n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
     n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
     n_para_6 <- length(time.point)*(n_para_5-2) + 2
-#    alpha_beta_0 <- rep(NA, n_para_6)
+    #    alpha_beta_0 <- rep(NA, n_para_6)
     alpha_beta_0 <- rep(NA, n_para_6/2) # initial parameters for event 1 over time points
     i_time <- sum1 <- sum2 <- 0
     for (specific.time in time.point) {
@@ -163,63 +164,32 @@ polyreg <- function(
       )
       i_time <- i_time + 1
       i_para <- n_para_1*(i_time-1)+1
-      tmp1 <- out_getInitialValues[1:n_para_1]
-#      tmp2 <- out_getInitialValues[n_para_3:n_para_4]
-      alpha_beta_0[i_para:(i_para+n_para_1-1)]                          <- tmp1
-#      alpha_beta_0[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]  <- tmp2
+      alpha_beta_0[i_para:(i_para+n_para_1-1)] <- out_getInitialValues[1:n_para_1]
       sum1 <- sum1 + out_getInitialValues[n_para_2]
-#      sum2 <- sum2 + out_getInitialValues[n_para_5]
     }
     alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
-#    alpha_beta_0[n_para_6]    <- sum2/length(time.point)
   } else if (outcome.type == 'POLY-PROPORTIONAL') {
-    n_para_1 <- out_normalizeCovariate$n_covariate+1
-    n_para_2 <- out_normalizeCovariate$n_covariate+2
-    n_para_3 <- out_normalizeCovariate$n_covariate+3
-    n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
-    n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
-    n_para_6 <- length(time.point)*(n_para_5-2) + 2
-    alpha_beta_0 <- rep(NA, n_para_6) # initial parameters for event 1 and 2 over time points
-    i_time <- sum1 <- sum2 <- 0
-    for (specific.time in time.point) {
-      specific.time <- as.numeric(specific.time)
-      out_getInitialValues <- getInitialValues(
-        formula = nuisance.model,
-        data = sorted_data,
-        exposure = exposure,
-        data.initial.values = data.initial.values,
-        estimand = estimand,
-        specific.time = specific.time,
-        outcome.type = outcome.type,
-        prob.bound = prob.bound
-      )
-      i_time <- i_time + 1
-      i_para <- n_para_1*(i_time-1)+1
-      tmp1 <- out_getInitialValues[1:n_para_1]
-      tmp2 <- out_getInitialValues[n_para_3:n_para_4]
-      alpha_beta_0[i_para:(i_para+n_para_1-1)]                          <- tmp1
-      alpha_beta_0[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]  <- tmp2
-      sum1 <- sum1 + out_getInitialValues[n_para_2]
-      sum2 <- sum2 + out_getInitialValues[n_para_5]
-    }
-    alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
-    alpha_beta_0[n_para_6]    <- sum2/length(time.point)
+    alpha_beta_0 <- getInitialValuesPP(
+      formula = nuisance.model,
+      data = sorted_data,
+      exposure = exposure,
+      data.initial.values = data.initial.values,
+      estimand = estimand,
+      outcome.type = outcome.type,
+      prob.bound = prob.bound,
+      out_normalizeCovariate = out_normalizeCovariate
+    )
   }
 
   #######################################################################################################
-  # 3. Calculating IPCW (function: calculateIPCW)
+  # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
   #######################################################################################################
   if (outcome.type == 'COMPETINGRISK' | outcome.type == 'SURVIVAL') {
-    ip.weight <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = estimand$time.point)
-  } else if (outcome.type == 'PROPORTIONAL') {
-    i_time <- 0
-    ip.weight.matrix <- matrix(NA, nrow=out_normalizeCovariate$n, ncol=length(time.point))
-    for (specific.time in time.point) {
-      i_time <- i_time + 1
-      ip.weight.matrix[,i_time] <- calculateIPCW(formula = nuisance.model, data = sorted_data, code.censoring=code.censoring, strata=strata, specific.time = specific.time)
-    }
+    ip.weight <- calculateIPCW(nuisance.model, sorted_data, code.censoring, strata, estimand$time.point)
   } else if (outcome.type == 'BINOMIAL') {
     ip.weight <- rep(1,nrow(sorted_data))
+  } else if (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL') {
+    ip.weight.matrix <- calculateIPCWMatrix(nuisance.model, sorted_data, code.censoring, strata, estimand, out_normalizeCovariate)
   }
 
   #######################################################################################################
@@ -263,7 +233,6 @@ polyreg <- function(
         ip.weight.matrix = ip.weight.matrix,
         alpha_beta = p,
         estimand = estimand,
-        time.point = time.point,
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
@@ -278,7 +247,6 @@ polyreg <- function(
         ip.weight.matrix = ip.weight.matrix,
         alpha_beta = p,
         estimand = estimand,
-        time.point = time.point,
         optim.method = optim.method,
         prob.bound = prob.bound,
         initial.CIFs = initial.CIFs)
@@ -477,71 +445,89 @@ polyreg <- function(
   #######################################################################################################
   # 5. Calculating variance (functions: calculateCov, calculateCovSurvival)
   #######################################################################################################
-  normalizeEstimate <- function(out_calculateCov, should.normalize.covariate, report.boot.conf, current_params, out_normalizeCovariate) {
-    if (should.normalize.covariate == TRUE & report.boot.conf == FALSE & !is.null(out_calculateCov$cov_estimated)) {
-        adj <- 1 / as.vector(out_normalizeCovariate$range)
+  normalizeEstimate <- function(
+    outcome.type,
+    report.boot.conf,
+    should.normalize.covariate,
+    current_params,
+    out_getResults,
+    estimand,
+    prob.bound,
+    out_normalizeCovariate
+  ) {
+    exclude_cov <- report.boot.conf == TRUE ||
+      outcome.type %in% c("PROPORTIONAL", "POLY-PROPORTIONAL")
+
+    if (exclude_cov) {
+      alpha_beta_estimated <- if (should.normalize.covariate) {
+        (1 / as.vector(out_normalizeCovariate$range)) * current_params
+      } else {
+        current_params
+      }
+      return(list(alpha_beta_estimated = alpha_beta_estimated, cov_estimated = NULL))
+    }
+    if (should.normalize.covariate) {
+      adj <- 1 / as.vector(out_normalizeCovariate$range)
+      if (length(adj) != length(current_params)) {
+        stop("Length of adj (range) must match length of current_params.")
+      }
       alpha_beta_estimated <- adj * current_params
-      adj_matrix <- diag(adj, length(adj), length(adj))
+      adj_matrix <- diag(adj, length(adj))
       cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
-    } else if (should.normalize.covariate == FALSE & report.boot.conf == FALSE & !is.null(out_calculateCov$cov_estimated)) {
+    } else {
       alpha_beta_estimated <- current_params
       cov_estimated <- out_calculateCov$cov_estimated
-    } else if (should.normalize.covariate == TRUE) {
-      adj <- 1 / as.vector(out_normalizeCovariate$range)
-      alpha_beta_estimated <- adj * current_params
-      cov_estimated <- NULL
-    } else {
-        alpha_beta_estimated <- current_params
-        cov_estimated <- NULL
     }
-      return(list(alpha_beta_estimated = alpha_beta_estimated, cov_estimated = cov_estimated))
+    return(list(alpha_beta_estimated = alpha_beta_estimated, cov_estimated = cov_estimated))
   }
 
-  if (outcome.type == 'COMPETINGRISK' & report.boot.conf == FALSE) {
-    out_calculateCov <- calculateCov(out_getResults, estimand, prob.bound)
-    out_normalizeEstimate <- normalizeEstimate(out_calculateCov, should.normalize.covariate, report.boot.conf, current_params, out_normalizeCovariate)
-  } else if ((outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') & report.boot.conf == FALSE) {
-    out_calculateCov <- calculateCovSurvival(out_getResults, estimand, prob.bound)
-    out_normalizeEstimate <- normalizeEstimate(out_calculateCov, should.normalize.covariate, report.boot.conf, current_params, out_normalizeCovariate)
-  } else if (outcome.type == 'PROPORTIONAL' | report.boot.conf == TRUE) {
-    out_calculateCov <- NULL
-    out_normalizeEstimate <- normalizeEstimate(out_calculateCov, should.normalize.covariate, report.boot.conf, current_params, out_normalizeCovariate)
-  }
+  out_calculateCov <- switch(
+    outcome.type,
+    "COMPETINGRISK" = calculateCov(out_getResults, estimand, prob.bound),
+    "SURVIVAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
+    "BINOMIAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
+    "PROPORTIONAL" = NULL,
+    "POLY-PROPORTIONAL" = NULL,
+    stop(sprintf("Unsupported outcome.type for covariance: %s", outcome.type))
+  )
+  out_normalizeEstimate <- normalizeEstimate(
+    outcome.type = outcome.type,
+    report.boot.conf = report.boot.conf,
+    should.normalize.covariate = should.normalize.covariate,
+    current_params = current_params,
+    out_getResults = out_getResults,
+    estimand = estimand,
+    prob.bound = prob.bound,
+    out_normalizeCovariate = out_normalizeCovariate
+  )
+
   alpha_beta_estimated <- out_normalizeEstimate$alpha_beta_estimated
-  cov_estimated <- out_normalizeEstimate$cov_estimated
+  cov_estimated        <- out_normalizeEstimate$cov_estimated
 
   #######################################################################################################
   # 6. Calculating bootstrap confidence interval (functions: boot, solveEstimatingEquationP)
   #######################################################################################################
-  boot.coef     <- rep(NA,2)
-  boot.coef_se  <- rep(NA,2)
-  boot.p_value  <- rep(NA,2)
-  boot.conf_low <- rep(NA,2)
-  boot.conf_high<- rep(NA,2)
-  if (outcome.type=='POLY-PROPORTIONAL') {
-    index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
-  } else if (outcome.type=='PROPORTIONAL') {
-    index_coef    <- c(length(time.point) + 1)
-  }
-
-  if (outcome.type=='PROPORTIONAL' | outcome.type=='POLY-PROPORTIONAL') {
+  if (report.boot.conf == TRUE) {
     set.seed(boot.parameter2)
-    if (outcome.type=='PROPORTIONAL') {
-      boot_function <- function(data, indices) {
-        return(solveEstimatingEquationP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                       sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
-        ))
-      }
-    } else if (outcome.type=='POLY-PROPORTIONAL') {
-      boot_function <- function(data, indices) {
-        return(solveEstimatingEquationPP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
-        ))
-      }
+    boot.coef     <- rep(NA,2)
+    boot.coef_se  <- rep(NA,2)
+    boot.p_value  <- rep(NA,2)
+    boot.conf_low <- rep(NA,2)
+    boot.conf_high<- rep(NA,2)
+    if (outcome.type=='POLY-PROPORTIONAL') {
+      index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
+    } else if (outcome.type=='PROPORTIONAL') {
+      index_coef    <- c(length(time.point) + 1)
     } else if (outcome.type=='COMPETINGRISK') {
+      index_coef <- seq_len(2*out_normalizeCovariate$n_covariate+4)
+    } else if (outcome.type=='BINOMIAL' | outcome.type=='SURVIVAL') {
+      index_coef <- seq_len(out_normalizeCovariate$n_covariate+2)
+    }
+
+    if (outcome.type=='COMPETINGRISK') {
       boot_function <- function(data, indices) {
         coef <- solveEstimatingEquationC(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
+                                         sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
         return(coef)
       }
     } else if (outcome.type=='SURVIVAL') {
@@ -556,7 +542,20 @@ polyreg <- function(
                                         sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
+    } else     if (outcome.type=='PROPORTIONAL') {
+      boot_function <- function(data, indices) {
+        return(solveEstimatingEquationP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
+                                        sorted_data=data[indices, ], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
+        ))
+      }
+    } else if (outcome.type=='POLY-PROPORTIONAL') {
+      boot_function <- function(data, indices) {
+        return(solveEstimatingEquationPP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
+                                         sorted_data=data[indices, ], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
+        ))
+      }
     }
+
     out_boot <- boot(sorted_data, boot_function, R = boot.parameter1)
     for (j in seq_len(length(index_coef))) {
       if (boot.bca == TRUE) {
@@ -577,19 +576,17 @@ polyreg <- function(
         boot.conf_high[j] <- out_boot.ci$normal[3]
       }
     }
-  }
-  out_bootstrap <- list(
-    boot.coef=boot.coef, boot.coef_se=boot.coef_se, boot.p_value=boot.p_value, boot.conf_low=boot.conf_low, boot.conf_high=boot.conf_high
-  )
+    out_bootstrap <- list(
+      boot.coef=boot.coef, boot.coef_se=boot.coef_se, boot.p_value=boot.p_value, boot.conf_low=boot.conf_low, boot.conf_high=boot.conf_high
+    )
+  } else {out_bootstrap <- NULL}
 
   #######################################################################################################
   # 7. Output (functions: reportSurvival, reportCompetingRisk, reportPrediction)
   #######################################################################################################
-  if (outcome.type == 'PROPORTIONAL') {
-    out_summary <- reportProportional(
-      nuisance.model, exposure, estimand, out_bootstrap,
-      out_getResults, iteration, max_param_diff, sol,
-      optim.method$outer.optim.method
+  if (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL') {
+    out_summary <- reportConstantEffects(
+      nuisance.model, exposure, estimand, out_bootstrap, out_getResults, iteration, max_param_diff, sol, optim.method$outer.optim.method
     )
     out_data <- NULL
   } else {
@@ -603,6 +600,6 @@ polyreg <- function(
     sorted_data$potential.CIFs <- out_getResults$potential.CIFs
     out_data <- sorted_data
   }
-  out <- list(summary = out_summary, coefficient=alpha_beta_estimated, cov=cov_estimated, diagnosis.statistics=out_data)
+  out <- list(summary = out_summary, coefficient=alpha_beta_estimated, cov=cov_estimated, bootstrap=out_bootstrap, diagnosis.statistics=out_data)
   return(out)
 }
