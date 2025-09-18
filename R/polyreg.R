@@ -87,13 +87,16 @@ polyreg <- function(
   #######################################################################################################
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
-  checkSpell(outcome.type, effect.measure1, effect.measure2)
-  checkInput(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
-  outcome.type <- outcome.type.corrected
-  effect.measure1 <- effect.measure1.corrected
-  effect.measure2 <- effect.measure2.corrected
-  time.point <- time.point.corrected
-  report.boot.conf <- report.boot.conf.corrected
+  cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
+  ci <- checkInput(cs$outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
+  outcome.type       <- cs$outcome.type
+  effect.measure1    <- cs$effect.measure1
+  effect.measure2    <- cs$effect.measure2
+  time.point         <- ci$time.point
+  conf.level         <- ci$conf.level
+  report.boot.conf   <- ci$report.boot.conf
+  outer.optim.method <- ci$outer.optim.method
+  inner.optim.method <- ci$inner.optim.method
 
   estimand <- list(
     effect.measure1=effect.measure1,
@@ -117,11 +120,6 @@ polyreg <- function(
   )
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
-  #  if (!is.null(subset)) {
-  #    subset_condition <- subset
-  #    data <- subset(data, eval(parse(text = subset_condition)))
-  #  }
-  #  data <- na.action(data)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
   sorted_data <- sortByCovariate(nuisance.model, normalized_data, should.sort.data, out_normalizeCovariate$n_covariate)
@@ -147,7 +145,7 @@ polyreg <- function(
     n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
     n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
     n_para_6 <- length(time.point)*(n_para_5-2) + 2
-    #    alpha_beta_0 <- rep(NA, n_para_6)
+
     alpha_beta_0 <- rep(NA, n_para_6/2) # initial parameters for event 1 over time points
     i_time <- sum1 <- sum2 <- 0
     for (specific.time in time.point) {
@@ -163,8 +161,9 @@ polyreg <- function(
         prob.bound = prob.bound
       )
       i_time <- i_time + 1
-      i_para <- n_para_1*(i_time-1)+1
-      alpha_beta_0[i_para:(i_para+n_para_1-1)] <- out_getInitialValues[1:n_para_1]
+      i_para <- n_para_1*(i_time-1) + 1
+      idx    <- if (n_para_1 > 0) seq.int(i_para, length.out = n_para_1) else integer(0)
+      alpha_beta_0[idx] <- out_getInitialValues[seq_len(n_para_1)]
       sum1 <- sum1 + out_getInitialValues[n_para_2]
     }
     alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
@@ -274,6 +273,7 @@ polyreg <- function(
   obj <- makeObjectiveFunction()
   sol_list <- list()
   diff_list <- list()
+  sol <- NULL
 
   if (outcome.type == 'COMPETINGRISK') {
     current_params <- alpha_beta_0
@@ -527,31 +527,31 @@ polyreg <- function(
     if (outcome.type=='COMPETINGRISK') {
       boot_function <- function(data, indices) {
         coef <- solveEstimatingEquationC(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                         sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
+                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
         return(coef)
       }
     } else if (outcome.type=='SURVIVAL') {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationS(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
+                                        sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
     } else if (outcome.type=='BINOMIAL') {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationB(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data=data[indices, ], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
+                                        sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
     } else     if (outcome.type=='PROPORTIONAL') {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data=data[indices, ], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
+                                        sorted_data = data[indices, , drop = FALSE], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
     } else if (outcome.type=='POLY-PROPORTIONAL') {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationPP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                         sorted_data=data[indices, ], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
+                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
     }

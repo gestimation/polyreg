@@ -494,6 +494,75 @@ sortByCovariate <- function(formula, data, should.sort.data, n_covariate) {
 }
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
+  # 必須パッケージの存在チェック（attachしない）
+  required_packages <- c("nleqslv", "boot")
+  miss   <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+  if (length(miss)) stop("Required packages not installed: ", paste(miss, collapse = ", "))
+
+  # 正規化：大文字化＋空白/ハイフン等の除去
+  canon <- function(x) gsub("[^A-Z]", "", toupper(trimws(as.character(x))))
+
+  ot_map <- c(
+    "C"="COMPETINGRISK","CR"="COMPETINGRISK","COMPETINGRISK"="COMPETINGRISK","COMPETINGRISKS"="COMPETINGRISK",
+    "S"="SURVIVAL","SURVIVAL"="SURVIVAL",
+    "B"="BINOMIAL","BINOMIAL"="BINOMIAL",
+    "P"="PROPORTIONAL","PROPORTIONAL"="PROPORTIONAL",
+    "PP"="POLY-PROPORTIONAL","POLYPROPORTIONAL"="POLY-PROPORTIONAL"
+  )
+  ot <- ot_map[[canon(outcome.type)]]
+  if (is.null(ot)) stop("Invalid outcome.type. Use COMPETINGRISK, SURVIVAL, BINOMIAL, PROPORTIONAL, POLY-PROPORTIONAL.")
+
+  em_map <- c(
+    "RR"="RR","RISKRATIO"="RR",
+    "OR"="OR","ODDSRATIO"="OR",
+    "SHR"="SHR","HR"="SHR",
+    "SUBDISTRIBUTIONHAZARDRATIO"="SHR"
+  )
+  e1 <- em_map[[canon(effect.measure1)]]
+  e2 <- em_map[[canon(effect.measure2)]]
+  if (is.null(e1)) stop("Invalid effect.measure1. Use: RR, OR, SHR.")
+  if (is.null(e2)) stop("Invalid effect.measure2. Use: RR, OR, SHR.")
+
+  list(outcome.type = ot, effect.measure1 = e1, effect.measure2 = e2)
+}
+
+checkInput <- function(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
+  if (!is.numeric(conf.level) || length(conf.level) != 1L || conf.level <= 0 || conf.level >= 1)
+    stop("conf.level must be a single number in (0, 1).")
+
+  if (outcome.type %in% c("COMPETINGRISK","SURVIVAL")) {
+    if (is.null(time.point) || !length(time.point)) stop("time.point is required for COMPETINGRISK/SURVIVAL.")
+    tp <- suppressWarnings(max(time.point, na.rm = TRUE))
+    if (!is.finite(tp) || tp < 0) stop("time.point must be non-negative and finite for COMPETINGRISK/SURVIVAL.")
+    time.point <- tp
+  } else if (outcome.type == "BINOMIAL") {
+    time.point <- Inf
+  }
+
+  outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
+  outer.optim.method <- match.arg(outer.optim.method, choices = outer_choices)
+
+  inner_choices <- c("optim","BFGS","SANN","multiroot")
+  inner.optim.method <- match.arg(inner.optim.method, choices = inner_choices)
+
+  if (is.null(report.boot.conf)) {
+    report.boot.conf <- outcome.type %in% c("PROPORTIONAL","POLY-PROPORTIONAL")
+  } else {
+    report.boot.conf <- isTRUE(report.boot.conf)
+  }
+
+  list(
+    conf.level = conf.level,
+    time.point = time.point,
+    report.boot.conf = report.boot.conf,
+    outer.optim.method = outer.optim.method,
+    inner.optim.method = inner.optim.method
+  )
+}
+
+
+
+checkSpell_old <- function(outcome.type, effect.measure1, effect.measure2) {
   if (requireNamespace("nleqslv", quietly = TRUE)
       & requireNamespace("boot", quietly = TRUE)) {
     suppressWarnings(library(nleqslv))
@@ -536,7 +605,7 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   }
 }
 
-checkInput <- function(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
+checkInput_old <- function(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
   if (outcome.type == "COMPETINGRISK" | outcome.type == "SURVIVAL") {
     if (length(time.point)>1) {
       time.point <<- max(time.point)

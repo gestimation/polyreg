@@ -166,6 +166,26 @@ createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, 
   return(na.action(analysis_dataset))
 }
 
+clampP <- function(p, eps = 1e-5) pmin(pmax(p, eps), 1 - eps)
+clampLogP <- function(x, eps = 1e-5) {
+  ex <- exp(x)
+  x[ex < eps]         <- log(eps)
+  x[(1 - ex) < eps]   <- log(1 - eps)
+  x
+}
+
+calculateIndexForParameter <- function(i_parameter,x_l,x_a,length.time.point=1) {
+  i_parameter[1] <- ncol(x_l)
+  i_parameter[2] <- i_parameter[1] + 1
+  i_parameter[3] <- i_parameter[1] + ncol(x_a)
+  i_parameter[4] <- i_parameter[1] + ncol(x_a) + 1
+  i_parameter[5] <- 2 * i_parameter[1] + ncol(x_a)
+  i_parameter[6] <- 2 * i_parameter[1] + ncol(x_a) + 1
+  i_parameter[7] <- 2 * i_parameter[1] + 2 * ncol(x_a)
+  i_parameter[8] <- length.time.point*(2 * i_parameter[1]) + 2 * ncol(x_a)
+  return(i_parameter)
+}
+
 create_rr_text <- function(coefficient, cov, index, omit.conf.int=TRUE, conf.int=0.95) {
   alpha <- 1 - conf.int
   critical_value <- qnorm(1 - alpha / 2)

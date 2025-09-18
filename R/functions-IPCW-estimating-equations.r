@@ -272,7 +272,7 @@ estimating_equation_survival <- function(
   i_parameter <- rep(NA, 7)
   i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a)
 
-  potential.CIFs <- calculatePotentialRisk(alpha_beta, x_l, offset, estimand)
+  potential.CIFs <- calculatePotentialRisk(alpha_beta, x_a, x_l, offset, estimand)
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
   ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
@@ -455,7 +455,7 @@ estimating_equation_proportional <- function(
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
 #    potential.CIFs <- calculatePotentialCIFs(alpha_beta_i,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    potential.CIFs <- calculatePotentialRisk(alpha_beta_i, x_l, offset, estimand)
+    potential.CIFs <- calculatePotentialRisk(alpha_beta_i, x_a, x_l, offset, estimand)
     one <- rep(1, nrow(x_l))
     a <- as.vector(x_a)
     ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
@@ -669,17 +669,5 @@ calculateNelsonAalen <- function(t, d) {
   n_atrisk <- rowSums(atrisk)
   na <- d / n_atrisk
   return(na)
-}
-
-calculateIndexForParameter <- function(i_parameter,x_l,x_a,length.time.point=1) {
-  i_parameter[1] <- ncol(x_l)
-  i_parameter[2] <- i_parameter[1] + 1
-  i_parameter[3] <- i_parameter[1] + ncol(x_a)
-  i_parameter[4] <- i_parameter[1] + ncol(x_a) + 1
-  i_parameter[5] <- 2 * i_parameter[1] + ncol(x_a)
-  i_parameter[6] <- 2 * i_parameter[1] + ncol(x_a) + 1
-  i_parameter[7] <- 2 * i_parameter[1] + 2 * ncol(x_a)
-  i_parameter[8] <- length.time.point*(2 * i_parameter[1]) + 2 * ncol(x_a)
-  return(i_parameter)
 }
 
