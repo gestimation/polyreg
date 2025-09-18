@@ -101,7 +101,7 @@ reportEffects <- function(outcome.type,
   exposed_events1 <- sum(out_getResults$y_1 * out_getResults$x_a)
   unexposed_events1 <- sum(out_getResults$y_1 * (1 - out_getResults$x_a))
 
-  if (outcome.type == 'COMPETINGRISK') {
+  if (outcome.type == 'COMPETING-RISK') {
     if (report.nuisance.parameter==TRUE) {
       coef2 <- getCoef(i_parameter[4]:i_parameter[7], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
     } else {
@@ -141,7 +141,7 @@ reportEffects <- function(outcome.type,
     )
   }
 
-  if (outcome.type == 'COMPETINGRISK') {
+  if (outcome.type == 'COMPETING-RISK') {
     tg <- list(
       event1 = list(
         tidy = tidy_df(coef1, text_values$terms_text),

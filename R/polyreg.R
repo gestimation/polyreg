@@ -13,7 +13,7 @@
 #' @param effect.measure1 character Specifies the effect measure for event (RR, OR, SHR).
 #' @param effect.measure2 character Specifies the effect measure for competing risk (RR, OR, SHR).
 #' @param time.point numeric The time point for exposure effects to be estimated.
-#' @param outcome.type character Specifies the type of outcome (COMPETINGRISK, SURVIVAL, BINOMIAL, PROPORTIONAL and POLY-PROPORTIONAL).
+#' @param outcome.type character Specifies the type of outcome (COMPETING-RISK, SURVIVAL, BINOMIAL, PROPORTIONAL and POLY-PROPORTIONAL).
 #' @param conf.level numeric The level for confidence intervals.
 #' @param report.nuisance.parameter logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.
 #' @param report.optim.convergence logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.
@@ -33,6 +33,7 @@
 #' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
 #' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
+#' @param use.parallel logical (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
@@ -61,7 +62,7 @@ polyreg <- function(
     effect.measure1 = 'RR',
     effect.measure2 = 'RR',
     time.point = NULL,
-    outcome.type = 'COMPETINGRISK',
+    outcome.type = 'COMPETING-RISK',
     conf.level = 0.95,
     report.nuisance.parameter = FALSE,
     report.optim.convergence = FALSE,
@@ -81,6 +82,7 @@ polyreg <- function(
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
     should.sort.data = FALSE,
+    use.parallel = FALSE,
     prob.bound = 1e-5
 ) {
 
@@ -105,14 +107,13 @@ polyreg <- function(
   time.point <- time.point.corrected
   report.boot.conf <- report.boot.conf.corrected
 
-  out_readSurv <- readSurv(nuisance.model, data, NULL, code.event1, code.censoring, subset.condition, na.action)
-  if (outcome.type %in% c("COMPETINGRISK","SURVIVAL")) {
-    if (is.null(time.point) || !length(time.point)) stop("time.point is required when outcome.type is COMPETINGRISK or SURVIVAL.")
+  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
+    if (is.null(time.point) || !length(time.point)) stop("time.point is required when outcome.type is COMPETING-RISK or SURVIVAL.")
     tp <- suppressWarnings(max(time.point, na.rm = TRUE))
-    if (!is.finite(tp) || tp < 0) stop("time.point must be non-negative and finite when outcome.type is COMPETINGRISK or SURVIVAL.")
+    if (!is.finite(tp) || tp < 0) stop("time.point must be non-negative and finite when outcome.type is COMPETING-RISK or SURVIVAL.")
     time.point <- tp
   } else if (outcome.type %in% c("PROPORTIONAL","POLY-PROPORTIONAL") & is.null(time.point)) {
-    time.point <- out_readSurv$time.point
+    time.point <- read_time.point(nuisance.model, data)
   } else if (outcome.type == "BINOMIAL") {
     time.point <- Inf
   }
@@ -146,7 +147,7 @@ polyreg <- function(
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
   #######################################################################################################
-  if (outcome.type == 'COMPETINGRISK' | outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') {
+  if (outcome.type == 'COMPETING-RISK' | outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') {
     alpha_beta_0 <- getInitialValues(
       formula = nuisance.model,
       data = sorted_data,
@@ -202,7 +203,7 @@ polyreg <- function(
   #######################################################################################################
   # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
   #######################################################################################################
-  if (outcome.type == 'COMPETINGRISK' | outcome.type == 'SURVIVAL') {
+  if (outcome.type == 'COMPETING-RISK' | outcome.type == 'SURVIVAL') {
     ip.weight <- calculateIPCW(nuisance.model, sorted_data, code.censoring, strata, estimand$time.point)
   } else if (outcome.type == 'BINOMIAL') {
     ip.weight <- rep(1,nrow(sorted_data))
@@ -213,6 +214,21 @@ polyreg <- function(
   #######################################################################################################
   # 4. Parameter estimation (functions: estimating_equation_ipcw, _survival, _proportional)
   #######################################################################################################
+  if (isTRUE(use.parallel)) {
+    if (!requireNamespace("future", quietly = TRUE) ||
+        !requireNamespace("future.apply", quietly = TRUE)) {
+      stop("use.parallel=TRUE ですが、'future' と 'future.apply' が見つかりません。インストールしてください。")
+    }
+    # この関数の実行中はマルチセッションを利用
+    future::plan(future::multisession)
+    # 乱数の再現性（必要に応じて）
+    RNGkind("L'Ecuyer-CMRG")
+    # 下位レイヤで参照できるようにオプション経由でもフラグを渡す
+    options(polyreg.use.parallel = TRUE)
+  } else {
+    options(polyreg.use.parallel = FALSE)
+  }
+
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
     initial.CIFs <- NULL
@@ -294,7 +310,7 @@ polyreg <- function(
   diff_list <- list()
   sol <- NULL
 
-  if (outcome.type == 'COMPETINGRISK') {
+  if (outcome.type == 'COMPETING-RISK') {
     current_params <- alpha_beta_0
     while ((iteration < optim.parameter2) & (max_param_diff > optim.parameter1)) {
       iteration <- iteration + 1
@@ -502,7 +518,7 @@ polyreg <- function(
 
   out_calculateCov <- switch(
     outcome.type,
-    "COMPETINGRISK" = calculateCov(out_getResults, estimand, prob.bound),
+    "COMPETING-RISK" = calculateCov(out_getResults, estimand, prob.bound),
     "SURVIVAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "BINOMIAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "PROPORTIONAL" = NULL,
@@ -526,7 +542,7 @@ polyreg <- function(
   #######################################################################################################
   # 6. Calculating bootstrap confidence interval (functions: boot, solveEstimatingEquationP)
   #######################################################################################################
-  if (report.boot.conf == TRUE) {
+  if (isTRUE(report.boot.conf)) {
     set.seed(boot.parameter2)
     boot.coef     <- rep(NA,2)
     boot.coef_se  <- rep(NA,2)
@@ -537,13 +553,13 @@ polyreg <- function(
       index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
     } else if (outcome.type=='PROPORTIONAL') {
       index_coef    <- c(length(time.point) + 1)
-    } else if (outcome.type=='COMPETINGRISK') {
+    } else if (outcome.type=='COMPETING-RISK') {
       index_coef <- seq_len(2*out_normalizeCovariate$n_covariate+4)
     } else if (outcome.type=='BINOMIAL' | outcome.type=='SURVIVAL') {
       index_coef <- seq_len(out_normalizeCovariate$n_covariate+2)
     }
 
-    if (outcome.type=='COMPETINGRISK') {
+    if (outcome.type=='COMPETING-RISK') {
       boot_function <- function(data, indices) {
         coef <- solveEstimatingEquationC(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                          sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
@@ -601,7 +617,7 @@ polyreg <- function(
   } else {out_bootstrap <- NULL}
 
   #######################################################################################################
-  # 7. Output (functions: reportSurvival, reportCompetingRisk, reportPrediction)
+  # 7. Output (functions: reportSurvival, reportCOMPETING-RISK, reportPrediction)
   #######################################################################################################
   if (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL') {
     out_summary <- reportConstantEffects(

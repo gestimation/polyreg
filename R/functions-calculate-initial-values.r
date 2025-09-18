@@ -563,8 +563,8 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   } else {
     stop("Required packages 'nleqslv' and/or 'boot' are not installed.")
   }
-  if (outcome.type %in% c("COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing risk", "Competingrisks", "Competing risks", "competingrisk", "competing risk", "competingrisks", "competing risks")) {
-    outcome.type.corrected <<- "COMPETINGRISK"
+  if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {
+    outcome.type.corrected <<- "COMPETING-RISK"
   } else if (outcome.type %in% c("SURVIVAL", "S", "Survival", "Survival")) {
     outcome.type.corrected <<- "SURVIVAL"
   } else if (outcome.type %in% c("POLY-PROPORTIONAL", "PP", "Poly-proportional", "poly-proportional")) {
@@ -574,7 +574,7 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   } else if (outcome.type %in% c("BINOMIAL", "B", "Binomial", "binomial")) {
     outcome.type.corrected <<- "BINOMIAL"
   } else {
-    stop("Invalid input for outcome.type, Choose 'COMPETINGRISK', 'SURVIVAL', 'BINOMIAL', 'PROPORTIONAL', or 'POLY-PROPORTIONAL'.")
+    stop("Invalid input for outcome.type, Choose 'COMPETING-RISK', 'SURVIVAL', 'BINOMIAL', 'PROPORTIONAL', or 'POLY-PROPORTIONAL'.")
   }
   if (effect.measure1 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
     effect.measure1.corrected <<- "RR"
@@ -599,13 +599,13 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
 }
 
 checkInput <- function(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
-  if (outcome.type == "COMPETINGRISK" | outcome.type == "SURVIVAL") {
+  if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL") {
     if (length(time.point)>1) {
       time.point <<- max(time.point)
     } else if (is.null(time.point)) {
-      stop("Invalid input for time.point when outcome.type is COMPETINGRISK or SURVIVAL.")
+      stop("Invalid input for time.point when outcome.type is COMPETING-RISK or SURVIVAL.")
     } else if (min(time.point)<0) {
-      stop("time.point should be positive when outcome.type is COMPETINGRISK or SURVIVAL.")
+      stop("time.point should be positive when outcome.type is COMPETING-RISK or SURVIVAL.")
     }
   } else if (outcome.type == "BINOMIAL") {
     time.point.corrected <<- Inf

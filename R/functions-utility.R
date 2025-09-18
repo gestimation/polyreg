@@ -99,8 +99,7 @@ Event <- function(time, event) {
   ss
 }
 
-readSurv <- function(formula, data, weights, code.event, code.censoring, subset.condition, na.action) {
-  data <- createAnalysisDataset(formula, data, weights, subset.condition, na.action)
+read_time.point <- function(formula, data) {
   cl <- match.call()
   if (missing(formula))
     stop("A formula argument is required")
@@ -117,44 +116,24 @@ readSurv <- function(formula, data, weights, code.event, code.censoring, subset.
   mf[[1]] <- as.name("model.frame")
   mf <- eval(mf, parent.frame())
   Y <- model.extract(mf, "response")
-  if (!inherits(Y, c("Event", "Surv"))) {
-    stop("A 'Surv' or 'Event' object is expected")
-  } else {
-    t <- Y[, 1]
-    if (any(t<0)) {
-      stop("Invalid time variable. Expected non-negative values. ")
-    }
-    if (!all(Y[, 2] %in% c(code.event, code.censoring))) {
-      stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
-    } else {
-      epsilon <- Y[, 2]
-      d <- ifelse(Y[, 2] == code.censoring, 0, 1)
-      d0 <- ifelse(Y[, 2] == code.censoring, 1, 0)
-    }
-  }
+#  if (!inherits(Y, c("Event", "Surv"))) {
+#    stop("A 'Surv' or 'Event' object is expected")
+#  } else {
+#    t <- Y[, 1]
+#    if (any(t<0)) {
+#      stop("Invalid time variable. Expected non-negative values. ")
+#    }
+#    if (!all(Y[, 2] %in% c(code.event, code.censoring))) {
+#      stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
+#    } else {
+#      epsilon <- Y[, 2]
+#      d <- ifelse(Y[, 2] == code.censoring, 0, 1)
+#      d0 <- ifelse(Y[, 2] == code.censoring, 1, 0)
+#    }
+#  }
   time.point <- with(data, t[epsilon > 0])
   time.point <- unique(time.point)
-  if (is.na(all.vars(out_terms)[3])) {
-    strata <- rep(1, nrow(data))
-    strata_name <- NULL
-  } else {
-    strata_name <- all.vars(out_terms)[3]
-    strata <- as.factor(data[[strata_name]])
-  }
-  if (is.null(weights)) {
-    w <- rep(1, nrow(data))
-  } else {
-    w <- data[[weights]]
-    if (!is.numeric(w))
-      stop("Weights must be numeric")
-    if (any(!is.finite(w)))
-      stop("Weights must be finite")
-    if (any(w < 0))
-      stop("Weights must be non-negative")
-    if (any(is.na(w)))
-      stop("Weights contain NA values")
-  }
-  return(list(t = t, epsilon = epsilon, d = d, d0 = d0, strata = strata, strata_name = strata_name, w=w, time.point=time.point))
+  return(time.point)
 }
 
 createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {

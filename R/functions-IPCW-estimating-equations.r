@@ -47,9 +47,21 @@ estimating_equation_ipcw <- function(
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a)
+  i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
-  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+#  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  potential.CIFs <- calculatePotentialCIFs_parallel(
+    alpha_beta_tmp = alpha_beta,
+    x_a = x_a,
+    x_l = x_l,
+    offset = offset,
+    epsilon = epsilon,
+    estimand = estimand,
+    optim.method = optim.method,
+    prob.bound = prob.bound,
+    initial.CIFs = initial.CIFs,
+    use.parallel = TRUE
+  )
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
   ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
@@ -270,7 +282,7 @@ estimating_equation_survival <- function(
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a)
+  i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
   potential.CIFs <- calculatePotentialRisk(alpha_beta, x_a, x_l, offset, estimand)
   one <- rep(1, nrow(x_l))
@@ -437,7 +449,7 @@ estimating_equation_proportional <- function(
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a,length(time.point))
+  i_parameter <- calculateIndexForParameter(NA,x_l,x_a,length(time.point))
 
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
@@ -550,7 +562,7 @@ estimating_equation_pproportional <- function(
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   i_parameter <- rep(NA, 7)
-  i_parameter <- calculateIndexForParameter(i_parameter,x_l,x_a,length(time.point))
+  i_parameter <- calculateIndexForParameter(NA,x_l,x_a,length(time.point))
 
   #n_para_1 <- ncol(x_l)
   #n_para_2 <- n_para_1 + 1
@@ -585,7 +597,19 @@ estimating_equation_pproportional <- function(
     y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
-    potential.CIFs <- calculatePotentialCIFs(alpha_beta_i,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+#    potential.CIFs <- calculatePotentialCIFs(alpha_beta_i,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialCIFs_parallel(
+      alpha_beta_tmp = alpha_beta,
+      x_a = x_a,
+      x_l = x_l,
+      offset = offset,
+      epsilon = epsilon,
+      estimand = estimand,
+      optim.method = optim.method,
+      prob.bound = prob.bound,
+      initial.CIFs = initial.CIFs,
+      use.parallel = TRUE
+    )
     ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
     ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 
