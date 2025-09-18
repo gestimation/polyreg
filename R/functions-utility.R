@@ -132,6 +132,8 @@ readSurv <- function(formula, data, weights, code.event, code.censoring, subset.
       d0 <- ifelse(Y[, 2] == code.censoring, 1, 0)
     }
   }
+  time.point <- with(data, t[epsilon > 0])
+  time.point <- unique(time.point)
   if (is.na(all.vars(out_terms)[3])) {
     strata <- rep(1, nrow(data))
     strata_name <- NULL
@@ -152,7 +154,7 @@ readSurv <- function(formula, data, weights, code.event, code.censoring, subset.
     if (any(is.na(w)))
       stop("Weights contain NA values")
   }
-  return(list(t = t, epsilon = epsilon, d = d, d0 = d0, strata = strata, strata_name = strata_name, w=w))
+  return(list(t = t, epsilon = epsilon, d = d, d0 = d0, strata = strata, strata_name = strata_name, w=w, time.point=time.point))
 }
 
 createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {
@@ -234,10 +236,4 @@ createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_prese
   d <- as.numeric(epsilon>0)
   return(data.frame(id = 1:n, t = t, epsilon = epsilon, d = d, w = w, strata = strata, subset=subset))
 }
-
-
-
-
-
-
 

@@ -87,16 +87,35 @@ polyreg <- function(
   #######################################################################################################
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
-  cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
-  ci <- checkInput(cs$outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
-  outcome.type       <- cs$outcome.type
-  effect.measure1    <- cs$effect.measure1
-  effect.measure2    <- cs$effect.measure2
-  time.point         <- ci$time.point
-  conf.level         <- ci$conf.level
-  report.boot.conf   <- ci$report.boot.conf
-  outer.optim.method <- ci$outer.optim.method
-  inner.optim.method <- ci$inner.optim.method
+  #cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
+  #ci <- checkInput(cs$outcome.type, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
+  #outcome.type       <- cs$outcome.type
+  #effect.measure1    <- cs$effect.measure1
+  #effect.measure2    <- cs$effect.measure2
+  #conf.level         <- ci$conf.level
+  #report.boot.conf   <- ci$report.boot.conf
+  #outer.optim.method <- ci$outer.optim.method
+  #inner.optim.method <- ci$inner.optim.method
+
+  checkSpell(outcome.type, effect.measure1, effect.measure2)
+  checkInput(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
+  outcome.type <- outcome.type.corrected
+  effect.measure1 <- effect.measure1.corrected
+  effect.measure2 <- effect.measure2.corrected
+  time.point <- time.point.corrected
+  report.boot.conf <- report.boot.conf.corrected
+
+  out_readSurv <- readSurv(nuisance.model, data, NULL, code.event1, code.censoring, subset.condition, na.action)
+  if (outcome.type %in% c("COMPETINGRISK","SURVIVAL")) {
+    if (is.null(time.point) || !length(time.point)) stop("time.point is required when outcome.type is COMPETINGRISK or SURVIVAL.")
+    tp <- suppressWarnings(max(time.point, na.rm = TRUE))
+    if (!is.finite(tp) || tp < 0) stop("time.point must be non-negative and finite when outcome.type is COMPETINGRISK or SURVIVAL.")
+    time.point <- tp
+  } else if (outcome.type %in% c("PROPORTIONAL","POLY-PROPORTIONAL") & is.null(time.point)) {
+    time.point <- out_readSurv$time.point
+  } else if (outcome.type == "BINOMIAL") {
+    time.point <- Inf
+  }
 
   estimand <- list(
     effect.measure1=effect.measure1,

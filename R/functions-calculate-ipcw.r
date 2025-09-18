@@ -61,16 +61,9 @@ calculateIPCWMatrix <- function(formula, data, code.censoring, strata_name, esti
     t <- Y[, 1]
     epsilon <- Y[, 2]
   }
-  if (is.null(estimand$time.point)) {
-    time.point <- with(data, t[epsilon > 0])
-    time.point <- unique(time.point)
-  } else {
-    time.point <- estimand$time.point
-  }
-
   i_time <- 0
-  ip.weight.matrix <- matrix(NA, nrow=out_normalizeCovariate$n, ncol=length(time.point))
-  for (specific.time in time.point) {
+  ip.weight.matrix <- matrix(NA, nrow=out_normalizeCovariate$n, ncol=length(estimand$time.point))
+  for (specific.time in estimand$time.point) {
     i_time <- i_time + 1
     ip.weight.matrix[,i_time] <- calculateIPCW(formula, data, code.censoring, strata_name, specific.time)
   }
