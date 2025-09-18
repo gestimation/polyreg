@@ -21,6 +21,8 @@
 #' @param boot.bca logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).
 #' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals. Defaults to 200.
 #' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
+#' @param computation.order.method character Specifies the method for computing CIFs (PARALLEL = parallel computation using future.future_lapply, SEQUENTIAL = sequential computation for each covariate level after sorting observations). Defaults to PARALLEL.
+#' @param computation.order.batch.size numeric Batch size for parallel computation. Defaults to NULL.
 #' @param outer.optim.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
 #' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
 #' @param optim.parameter1 numeric A threshold for initial value search in outer loop. Defaults to 1e-5.
@@ -30,10 +32,10 @@
 #' @param optim.parameter5 integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.
 #' @param optim.parameter6 numeric A threshold for determining convergence in inner loop. Defaults to 1e-10.
 #' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
+#' @param optim.parameter8 integer SD for random jitter in inner loop. Defaults to 2.5.
+#' @param optim.parameter9 integer Maximum number of retry in inner loop. Defaults to 2.
 #' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
-#' @param should.sort.data logical Indicates whether data are initially sorted to reduce computation steps (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
-#' @param use.parallel logical (TRUE = sort, FALSE = otherwise). Defaults to TRUE.
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
@@ -59,10 +61,10 @@ polyreg <- function(
     code.event2 = 2,
     code.censoring = 0,
     code.exposure.ref = 0,
-    effect.measure1 = 'RR',
-    effect.measure2 = 'RR',
+    effect.measure1 = "RR",
+    effect.measure2 = "RR",
     time.point = NULL,
-    outcome.type = 'COMPETING-RISK',
+    outcome.type = "COMPETING-RISK",
     conf.level = 0.95,
     report.nuisance.parameter = FALSE,
     report.optim.convergence = FALSE,
@@ -70,8 +72,10 @@ polyreg <- function(
     boot.bca = TRUE,
     boot.parameter1 = 200,
     boot.parameter2 = 46,
-    outer.optim.method = 'nleqslv',
-    inner.optim.method = 'optim',
+    computation.order.method = "PARALLEL",
+    computation.order.batch.size = NULL,
+    outer.optim.method = "nleqslv",
+    inner.optim.method = "optim",
     optim.parameter1 = 1e-5,
     optim.parameter2 = 20,
     optim.parameter3 = 100,
@@ -79,55 +83,34 @@ polyreg <- function(
     optim.parameter5 = 200,
     optim.parameter6 = 1e-10,
     optim.parameter7 = 200,
+    optim.parameter8 = 2.5,
+    optim.parameter9 = 2,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
-    should.sort.data = FALSE,
-    use.parallel = FALSE,
     prob.bound = 1e-5
 ) {
 
   #######################################################################################################
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
-  #cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
-  #ci <- checkInput(cs$outcome.type, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
-  #outcome.type       <- cs$outcome.type
-  #effect.measure1    <- cs$effect.measure1
-  #effect.measure2    <- cs$effect.measure2
-  #conf.level         <- ci$conf.level
-  #report.boot.conf   <- ci$report.boot.conf
-  #outer.optim.method <- ci$outer.optim.method
-  #inner.optim.method <- ci$inner.optim.method
-
-  checkSpell(outcome.type, effect.measure1, effect.measure2)
-  checkInput(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method)
-  outcome.type <- outcome.type.corrected
-  effect.measure1 <- effect.measure1.corrected
-  effect.measure2 <- effect.measure2.corrected
-  time.point <- time.point.corrected
-  report.boot.conf <- report.boot.conf.corrected
-
-  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
-    if (is.null(time.point) || !length(time.point)) stop("time.point is required when outcome.type is COMPETING-RISK or SURVIVAL.")
-    tp <- suppressWarnings(max(time.point, na.rm = TRUE))
-    if (!is.finite(tp) || tp < 0) stop("time.point must be non-negative and finite when outcome.type is COMPETING-RISK or SURVIVAL.")
-    time.point <- tp
-  } else if (outcome.type %in% c("PROPORTIONAL","POLY-PROPORTIONAL") & is.null(time.point)) {
-    time.point <- read_time.point(nuisance.model, data)
-  } else if (outcome.type == "BINOMIAL") {
-    time.point <- Inf
-  }
+  cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
+  outcome.type <- cs$outcome.type
+  ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, outer.optim.method, inner.optim.method)
+  report.boot.conf <- ci$report.boot.conf
+  tp <- read_time.point(nuisance.model, data, outcome.type, code.censoring, time.point)
 
   estimand <- list(
-    effect.measure1=effect.measure1,
-    effect.measure2=effect.measure2,
-    time.point=time.point,
+    effect.measure1=cs$effect.measure1,
+    effect.measure2=cs$effect.measure2,
+    time.point=tp,
     code.event1=code.event1,
     code.event2=code.event2,
     code.censoring=code.censoring,
     code.exposure.ref=code.exposure.ref
   )
   optim.method <- list(
+    computation.order.method = computation.order.method,
+    computation.order.batch.size = computation.order.batch.size,
     outer.optim.method = outer.optim.method,
     inner.optim.method = inner.optim.method,
     optim.parameter1 = optim.parameter1,
@@ -142,12 +125,12 @@ polyreg <- function(
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
-  sorted_data <- sortByCovariate(nuisance.model, normalized_data, should.sort.data, out_normalizeCovariate$n_covariate)
+  sorted_data <- sortByCovariate(nuisance.model, normalized_data, optim.method, out_normalizeCovariate$n_covariate)
 
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
   #######################################################################################################
-  if (outcome.type == 'COMPETING-RISK' | outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') {
+  if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
     alpha_beta_0 <- getInitialValues(
       formula = nuisance.model,
       data = sorted_data,
@@ -158,7 +141,7 @@ polyreg <- function(
       outcome.type = outcome.type,
       prob.bound = prob.bound
     )
-  } else if (outcome.type == 'PROPORTIONAL') {
+  } else if (outcome.type == "PROPORTIONAL") {
     n_para_1 <- out_normalizeCovariate$n_covariate+1
     n_para_2 <- out_normalizeCovariate$n_covariate+2
     n_para_3 <- out_normalizeCovariate$n_covariate+3
@@ -187,7 +170,7 @@ polyreg <- function(
       sum1 <- sum1 + out_getInitialValues[n_para_2]
     }
     alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
-  } else if (outcome.type == 'POLY-PROPORTIONAL') {
+  } else if (outcome.type == "POLY-PROPORTIONAL") {
     alpha_beta_0 <- getInitialValuesPP(
       formula = nuisance.model,
       data = sorted_data,
@@ -203,32 +186,18 @@ polyreg <- function(
   #######################################################################################################
   # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
   #######################################################################################################
-  if (outcome.type == 'COMPETING-RISK' | outcome.type == 'SURVIVAL') {
+  if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL") {
     ip.weight <- calculateIPCW(nuisance.model, sorted_data, code.censoring, strata, estimand$time.point)
-  } else if (outcome.type == 'BINOMIAL') {
+  } else if (outcome.type == "BINOMIAL") {
     ip.weight <- rep(1,nrow(sorted_data))
-  } else if (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL') {
+  } else if (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL") {
     ip.weight.matrix <- calculateIPCWMatrix(nuisance.model, sorted_data, code.censoring, strata, estimand, out_normalizeCovariate)
   }
 
   #######################################################################################################
   # 4. Parameter estimation (functions: estimating_equation_ipcw, _survival, _proportional)
   #######################################################################################################
-  if (isTRUE(use.parallel)) {
-    if (!requireNamespace("future", quietly = TRUE) ||
-        !requireNamespace("future.apply", quietly = TRUE)) {
-      stop("use.parallel=TRUE ですが、'future' と 'future.apply' が見つかりません。インストールしてください。")
-    }
-    # この関数の実行中はマルチセッションを利用
-    future::plan(future::multisession)
-    # 乱数の再現性（必要に応じて）
-    RNGkind("L'Ecuyer-CMRG")
-    # 下位レイヤで参照できるようにオプション経由でもフラグを渡す
-    options(polyreg.use.parallel = TRUE)
-  } else {
-    options(polyreg.use.parallel = FALSE)
-  }
-
+  if (optim.method$computation.order.method == 'PARALLEL') future::plan(future::multisession)
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
     initial.CIFs <- NULL
@@ -310,7 +279,7 @@ polyreg <- function(
   diff_list <- list()
   sol <- NULL
 
-  if (outcome.type == 'COMPETING-RISK') {
+  if (outcome.type == "COMPETING-RISK") {
     current_params <- alpha_beta_0
     while ((iteration < optim.parameter2) & (max_param_diff > optim.parameter1)) {
       iteration <- iteration + 1
@@ -351,7 +320,7 @@ polyreg <- function(
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
-  } else if (outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') {
+  } else if (outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
     current_params <- alpha_beta_0
     while ((iteration < optim.parameter2) & (max_param_diff > optim.parameter1)) {
       iteration <- iteration + 1
@@ -392,7 +361,7 @@ polyreg <- function(
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
-  } else if (outcome.type == 'PROPORTIONAL') {
+  } else if (outcome.type == "PROPORTIONAL") {
     current_params <- alpha_beta_0
     while ((iteration < optim.parameter2) & (max_param_diff > optim.parameter1)) {
       iteration <- iteration + 1
@@ -433,7 +402,7 @@ polyreg <- function(
       sol_list[[iteration]] <- sol
       diff_list[[iteration]] <- max_param_diff
     }
-  } else if (outcome.type == 'POLY-PROPORTIONAL') {
+  } else if (outcome.type == "POLY-PROPORTIONAL") {
     current_params <- alpha_beta_0
     while ((iteration < optim.parameter2) & (max_param_diff > optim.parameter1)) {
       iteration <- iteration + 1
@@ -490,8 +459,7 @@ polyreg <- function(
     prob.bound,
     out_normalizeCovariate
   ) {
-    exclude_cov <- report.boot.conf == TRUE ||
-      outcome.type %in% c("PROPORTIONAL", "POLY-PROPORTIONAL")
+    exclude_cov <- report.boot.conf == TRUE || outcome.type %in% c("PROPORTIONAL", "POLY-PROPORTIONAL")
 
     if (exclude_cov) {
       alpha_beta_estimated <- if (should.normalize.covariate) {
@@ -503,9 +471,7 @@ polyreg <- function(
     }
     if (should.normalize.covariate) {
       adj <- 1 / as.vector(out_normalizeCovariate$range)
-      if (length(adj) != length(current_params)) {
-        stop("Length of adj (range) must match length of current_params.")
-      }
+      if (length(adj) != length(current_params))stop("Length of adj (range) must match length of current_params.")
       alpha_beta_estimated <- adj * current_params
       adj_matrix <- diag(adj, length(adj))
       cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
@@ -549,41 +515,42 @@ polyreg <- function(
     boot.p_value  <- rep(NA,2)
     boot.conf_low <- rep(NA,2)
     boot.conf_high<- rep(NA,2)
-    if (outcome.type=='POLY-PROPORTIONAL') {
+
+    if (outcome.type=="POLY-PROPORTIONAL") {
       index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
-    } else if (outcome.type=='PROPORTIONAL') {
+    } else if (outcome.type=="PROPORTIONAL") {
       index_coef    <- c(length(time.point) + 1)
-    } else if (outcome.type=='COMPETING-RISK') {
+    } else if (outcome.type=="COMPETING-RISK") {
       index_coef <- seq_len(2*out_normalizeCovariate$n_covariate+4)
-    } else if (outcome.type=='BINOMIAL' | outcome.type=='SURVIVAL') {
+    } else if (outcome.type=="BINOMIAL" | outcome.type=="SURVIVAL") {
       index_coef <- seq_len(out_normalizeCovariate$n_covariate+2)
     }
 
-    if (outcome.type=='COMPETING-RISK') {
+    if (outcome.type=="COMPETING-RISK") {
       boot_function <- function(data, indices) {
         coef <- solveEstimatingEquationC(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                          sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
         return(coef)
       }
-    } else if (outcome.type=='SURVIVAL') {
+    } else if (outcome.type=="SURVIVAL") {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationS(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
-    } else if (outcome.type=='BINOMIAL') {
+    } else if (outcome.type=="BINOMIAL") {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationB(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
-    } else     if (outcome.type=='PROPORTIONAL') {
+    } else     if (outcome.type=="PROPORTIONAL") {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
         ))
       }
-    } else if (outcome.type=='POLY-PROPORTIONAL') {
+    } else if (outcome.type=="POLY-PROPORTIONAL") {
       boot_function <- function(data, indices) {
         return(solveEstimatingEquationPP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
                                          sorted_data = data[indices, , drop = FALSE], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
@@ -593,7 +560,7 @@ polyreg <- function(
 
     out_boot <- boot(sorted_data, boot_function, R = boot.parameter1)
     for (j in seq_len(length(index_coef))) {
-      if (boot.bca == TRUE) {
+      if (isTRUE(boot.bca)) {
         out_boot.ci <- boot.ci(out_boot, conf = conf.level, index = index_coef[j], type = c("norm", "bca"))
         boot.coef[j] <- (out_boot.ci$normal[2] + out_boot.ci$normal[3])/2
         ci_range <- out_boot.ci$normal[3] - out_boot.ci$normal[2]
@@ -619,7 +586,7 @@ polyreg <- function(
   #######################################################################################################
   # 7. Output (functions: reportSurvival, reportCOMPETING-RISK, reportPrediction)
   #######################################################################################################
-  if (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL') {
+  if (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL") {
     out_summary <- reportConstantEffects(
       nuisance.model, exposure, estimand, out_bootstrap, out_getResults, iteration, max_param_diff, sol, optim.method$outer.optim.method
     )

@@ -7,8 +7,6 @@ calculateIPCW <- function(formula, data, code.censoring, strata_name, specific.t
   mf[[1]] <- as.name("model.frame")
   mf <- eval(mf, parent.frame())
   Y <- model.extract(mf, "response")
-  if (!inherits(Y, c("Event", "Surv")))
-    stop("Expected a 'Surv' or 'Event'-object")
   if (ncol(Y) == 2) {
     t <- Y[, 1]
     epsilon <- Y[, 2]

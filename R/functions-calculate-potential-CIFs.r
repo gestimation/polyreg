@@ -10,41 +10,38 @@ calculatePotentialCIFs_parallel <- function(
     initial.CIFs = NULL,
     use.parallel = TRUE
 ) {
-  # ---- ユーティリティ ----
-  # 4つの確率を境界内にクリップし、(p1+p2) が 1 を超えないよう比率縮約
-  clamp_probs <- function(p, bound) {
-    p <- pmin(pmax(p, bound), 1 - bound)     # [bound, 1-bound]
-    # 未曝露 (p10,p20), 曝露 (p11,p21)
+
+  safe_exp <- function(x) {
+    x <- ifelse(is.finite(x), x, 700) # exp(700) ~ 1e304
+    exp(x)
+  }
+
+  clampCIFs <- function(p, eps = 1e-5) {
+    p <- pmin(pmax(p, eps), 1 - eps)
     s0 <- p[1] + p[2]
     s1 <- p[3] + p[4]
-    max_sum <- 1 - bound
+    max_sum <- 1 - eps
     if (s0 > max_sum) {
       p[1:2] <- p[1:2] * (max_sum / s0)
     }
     if (s1 > max_sum) {
       p[3:4] <- p[3:4] * (max_sum / s1)
     }
-    p
+    return(p)
   }
 
-  safe_exp <- function(z) {
-    # exp() のオーバーフロー/NaN対策
-    z <- ifelse(is.finite(z), z, 700) # exp(700) ~ 1e304
-    exp(z)
-  }
-
-  # ---- パラメータ分割 ----
+  i_parameter <- rep(NA, 7L)
   i_parameter <- calculateIndexForParameter(NA, x_l, x_a)
-  alpha_1     <- alpha_beta_tmp[1:i_parameter[1]]
-  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
-  alpha_2     <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
-  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
-
-  # ---- 線形予測子 ----
-  alpha_tmp_1 <- x_l %*% alpha_1 + offset
-  alpha_tmp_2 <- x_l %*% alpha_2 + offset
-
-  # ---- 初期 log(p) ----
+  index1 <- seq_len(i_parameter[1])
+  index23 <- seq.int(i_parameter[2], i_parameter[3])
+  index45 <- seq.int(i_parameter[4], i_parameter[5])
+  index67 <- seq.int(i_parameter[6], i_parameter[7])
+  alpha_1 <- alpha_beta_tmp[index1]
+  beta_tmp_1  <- alpha_beta_tmp[index23]
+  alpha_2 <- alpha_beta_tmp[index45]
+  beta_tmp_2  <- alpha_beta_tmp[index67]
+  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)                                  # ### INDEX-SAFE
+  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)                                  # ### INDEX-SAFE
   n <- length(epsilon)
   freq1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
   freq2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
@@ -68,9 +65,9 @@ calculatePotentialCIFs_parallel <- function(
   # ---- 収束失敗対策の設定（デフォルト）----
   reltol     <- if (!is.null(optim.method$optim.parameter6)) optim.method$optim.parameter6 else 1e-8
   maxit      <- if (!is.null(optim.method$optim.parameter7)) optim.method$optim.parameter7 else 200
-  nm.maxit   <- if (!is.null(optim.method$nm.maxit)) optim.method$nm.maxit else max(200, maxit * 2)
-  retry.max  <- if (!is.null(optim.method$retry.max)) optim.method$retry.max else 2
-  jitter.sd  <- if (!is.null(optim.method$jitter.scale)) optim.method$jitter.scale else 0.25
+  nm.maxit   <- if (!is.null(optim.method$optim.parameter7)) optim.method$optim.parameter7 else max(200, maxit * 2)
+  jitter.sd  <- if (!is.null(optim.method$optim.parameter8)) optim.method$optim.parameter8 else 0.25
+  retry.max  <- if (!is.null(optim.method$optim.parameter9)) optim.method$optim.parameter9 else 2
   # 目的関数ラッパ（log_p 入力、内部で安全化）
   obj_fun <- function(lp, a1, b1, a2, b2, est, bound) {
     # lp が非有限なら log_p0 に置換
@@ -165,12 +162,8 @@ calculatePotentialCIFs_parallel <- function(
       p <- safe_exp(log_p0)
     }
 
-    # クリップ & 和の縮約
-    p <- clamp_probs(p, prob.bound)
-
-    # 念のためのガード（再クリップ）
+    p <- clampCIFs(p, prob.bound)
     p <- pmin(pmax(p, prob.bound), 1 - prob.bound)
-
     p
   }
 
@@ -182,7 +175,7 @@ calculatePotentialCIFs_parallel <- function(
         out <- tryCatch(solve_one(i_x), error = function(e) NULL)
         if (is.null(out)) {
           # バッチ内完全失敗の保険
-          out <- clamp_probs(safe_exp(log_p0), prob.bound)
+          out <- clampCIFs(safe_exp(log_p0), prob.bound)
         }
         out
       })),
@@ -205,7 +198,7 @@ calculatePotentialCIFs_parallel <- function(
   # 万一の NA/Inf を最終保険で埋める
   bad <- !is.finite(unique_CIFs)
   if (any(bad)) {
-    fallback <- matrix(rep(clamp_probs(safe_exp(log_p0), prob.bound),
+    fallback <- matrix(rep(clampCIFs(safe_exp(log_p0), prob.bound),
                            length.out = length(unique_idx) * 4),
                        ncol = 4, byrow = TRUE)
     unique_CIFs[bad] <- fallback[bad]
@@ -213,93 +206,6 @@ calculatePotentialCIFs_parallel <- function(
 
   CIFs_all <- unique_CIFs[key_to_index, , drop = FALSE]
   CIFs_all
-}
-
-
-calculatePotentialCIFs_parallel_ <- function(
-    alpha_beta_tmp,
-    x_a,
-    x_l,
-    offset,
-    epsilon,
-    estimand,
-    optim.method,
-    prob.bound,
-    initial.CIFs = NULL,
-    use.parallel = TRUE
-) {
-  # パラメータ
-  i_parameter <- calculateIndexForParameter(NA, x_l, x_a)
-  alpha_1     <- alpha_beta_tmp[1:i_parameter[1]]
-  beta_tmp_1  <- alpha_beta_tmp[i_parameter[2]:i_parameter[3]]
-  alpha_2     <- alpha_beta_tmp[i_parameter[4]:i_parameter[5]]
-  beta_tmp_2  <- alpha_beta_tmp[i_parameter[6]:i_parameter[7]]
-
-  # 線形予測子
-  alpha_tmp_1 <- x_l %*% alpha_1 + offset
-  alpha_tmp_2 <- x_l %*% alpha_2 + offset
-
-  # 初期log(p)
-  n <- length(epsilon)
-  freq1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
-  freq2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
-  log_p0 <- log(c(freq1, freq2, freq1, freq2))
-
-  # 重複検出（キー作成）
-  x_l_key <- apply(x_l, 1, paste0, collapse = "_")
-  unique_keys <- !duplicated(x_l_key)
-  key_to_index <- match(x_l_key, x_l_key[unique_keys])  # optionally: fastmatch::fmatch()
-
-  # バッチ構成
-  unique_idx <- which(unique_keys)
-  batch.size <- if (!is.null(optim.method$computation.order.batch.size)) {
-    optim.method$computation.order.batch.size
-  } else {
-    cores <- parallel::detectCores()
-    max(10, floor(length(unique_idx) / (cores * 2))) * 2
-  }
-  batch_indices <- split(unique_idx, ceiling(seq_along(unique_idx) / batch.size))
-
-  # CIF計算関数
-  solve_CIF_batch <- function(idx) {
-    matrix(
-      data = unlist(lapply(idx, function(i_x) {
-        log_p_i <- if (is.null(initial.CIFs)) log_p0 else log(initial.CIFs[i_x, ])
-        sol <- optim(
-          par     = log_p_i,
-          fn      = function(lp) estimating_equation_CIFs(
-            log_p       = lp,
-            alpha_tmp_1 = alpha_tmp_1[i_x],
-            beta_tmp_1  = beta_tmp_1,
-            alpha_tmp_2 = alpha_tmp_2[i_x],
-            beta_tmp_2  = beta_tmp_2,
-            estimand    = estimand,
-            prob.bound  = prob.bound
-          ),
-          method  = "BFGS",
-          control = list(
-            maxit  = optim.method$optim.parameter7,
-            reltol = optim.method$optim.parameter6
-          )
-        )
-        exp(sol$par)
-      })),
-      ncol = 4,
-      byrow = TRUE
-    )
-  }
-
-  # 並列 or 逐次実行
-  result_list <- if (use.parallel) {
-    future.apply::future_lapply(batch_indices, solve_CIF_batch, future.seed = TRUE)
-  } else {
-    lapply(batch_indices, solve_CIF_batch)
-  }
-
-  # 結合・復元
-  unique_CIFs <- do.call(rbind, result_list)
-  CIFs_all <- unique_CIFs[key_to_index, , drop = FALSE]
-  return(CIFs_all)
 }
 
 calculatePotentialCIFs_old <- function(
