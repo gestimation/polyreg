@@ -49,7 +49,7 @@ estimating_equation_ipcw <- function(
   i_parameter <- rep(NA, 7)
   i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
-  if (optim.method$computation.order.method=="OLD") {
+  if (optim.method$computation.order.method=="SEQUENTIAL") {
     potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   } else {
     potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
@@ -458,7 +458,7 @@ estimating_equation_proportional <- function(
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
-    if (optim.method$computation.order.method=="OLD") {
+    if (optim.method$computation.order.method=="SEQUENTIAL") {
       potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     } else {
       potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
@@ -467,29 +467,29 @@ estimating_equation_proportional <- function(
     a <- as.vector(x_a)
     ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
     w11 <- 1 / (ey_1 * (1 - ey_1))
-#    wy_1 <- ip.weight * y_1
+    #    wy_1 <- ip.weight * y_1
     wy_1 <- ip.weight.matrix[,i_time] * y_1
     wy_1ey_1 <- w11*(wy_1 - ey_1)
     d <- cbind(x_l, x_a)
     residual <- wy_1ey_1
-#    ret <- as.vector(t(d) %*% residual / nrow(x_l))
-#    n_col_d <- ncol(d)
-#    score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
-#    for (j in seq_len(n_col_d)) {
-#      score.matrix[,j] <- d[,j]*residual
-#    }
+    #    ret <- as.vector(t(d) %*% residual / nrow(x_l))
+    #    n_col_d <- ncol(d)
+    #    score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
+    #    for (j in seq_len(n_col_d)) {
+    #      score.matrix[,j] <- d[,j]*residual
+    #    }
 
     subscore <- as.vector(t(d) %*% residual / nrow(x_l))
     tmp1 <- t(subscore[1:i_parameter[1]])
     score_beta <- cbind(score_beta, tmp1)
     score_alpha1 <- score_alpha1 + subscore[i_parameter[2]:i_parameter[3]]
-#    tmp1 <- t(subscore[1:i_parameter[1],])
-#    tmp2 <- t(subscore[i_parameter[4]:i_parameter[5],])
-#    score_beta <- cbind(score_beta, tmp1, tmp2)
-#    score_alpha1 <- score_alpha1 + subscore[i_parameter[2]:i_parameter[3],]
-#    score_alpha2 <- score_alpha2 + subscore[i_parameter[6]:i_parameter[7],]
+    #    tmp1 <- t(subscore[1:i_parameter[1],])
+    #    tmp2 <- t(subscore[i_parameter[4]:i_parameter[5],])
+    #    score_beta <- cbind(score_beta, tmp1, tmp2)
+    #    score_alpha1 <- score_alpha1 + subscore[i_parameter[2]:i_parameter[3],]
+    #    score_alpha2 <- score_alpha2 + subscore[i_parameter[6]:i_parameter[7],]
   }
-#  score <- cbind(score_beta, score_alpha1, score_alpha2)
+  #  score <- cbind(score_beta, score_alpha1, score_alpha2)
   score <- cbind(score_beta, score_alpha1)
   out <- list(
     ret   = score,
@@ -506,15 +506,15 @@ estimating_equation_proportional <- function(
 }
 
 estimating_equation_pproportional <- function(
-  formula,
-  data,
-  exposure,
-  ip.weight.matrix,
-  alpha_beta,
-  estimand,
-  optim.method,
-  prob.bound,
-  initial.CIFs = NULL
+    formula,
+    data,
+    exposure,
+    ip.weight.matrix,
+    alpha_beta,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
 ) {
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
@@ -577,7 +577,7 @@ estimating_equation_pproportional <- function(
   for (specific.time in time.point) {
     i_time <- i_time + 1
     i_para <- i_parameter[1]*(i_time-1)+1
-#    i_para <- n_para_1*(i_time-1)+1
+    #    i_para <- n_para_1*(i_time-1)+1
     alpha_beta_i[1:i_parameter[1]]              <- alpha_beta[i_para:(i_para+i_parameter[1]-1)]
     alpha_beta_i[i_parameter[2]:i_parameter[3]] <- alpha_beta[i_parameter[8]/2]
     alpha_beta_i[i_parameter[4]:i_parameter[5]] <- alpha_beta[(i_parameter[8]/2+i_para):(i_parameter[8]/2+i_para+i_parameter[1]-1)]
@@ -592,8 +592,11 @@ estimating_equation_pproportional <- function(
     y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
-    #  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    if (optim.method$computation.order.method=="SEQUENTIAL") {
+      potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    } else {
+      potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    }
     ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
     ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 
@@ -646,7 +649,7 @@ estimating_equation_pproportional <- function(
     x_l   = x_l,
     i_parameter = i_parameter
   )
-#  out <- list(ret = score)
+  #  out <- list(ret = score)
   return(out)
 }
 
