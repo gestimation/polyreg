@@ -49,19 +49,11 @@ estimating_equation_ipcw <- function(
   i_parameter <- rep(NA, 7)
   i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
-#  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-  potential.CIFs <- calculatePotentialCIFs_parallel(
-    alpha_beta_tmp = alpha_beta,
-    x_a = x_a,
-    x_l = x_l,
-    offset = offset,
-    epsilon = epsilon,
-    estimand = estimand,
-    optim.method = optim.method,
-    prob.bound = prob.bound,
-    initial.CIFs = initial.CIFs,
-    use.parallel = TRUE
-  )
+  if (optim.method$computation.order.method=="OLD") {
+    potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  } else {
+    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  }
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
   ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
@@ -466,8 +458,11 @@ estimating_equation_proportional <- function(
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
-#    potential.CIFs <- calculatePotentialCIFs(alpha_beta_i,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    potential.CIFs <- calculatePotentialRisk(alpha_beta_i, x_a, x_l, offset, estimand)
+    if (optim.method$computation.order.method=="OLD") {
+      potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    } else {
+      potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    }
     one <- rep(1, nrow(x_l))
     a <- as.vector(x_a)
     ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
@@ -597,19 +592,8 @@ estimating_equation_pproportional <- function(
     y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
-#    potential.CIFs <- calculatePotentialCIFs(alpha_beta_i,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    potential.CIFs <- calculatePotentialCIFs_parallel(
-      alpha_beta_tmp = alpha_beta,
-      x_a = x_a,
-      x_l = x_l,
-      offset = offset,
-      epsilon = epsilon,
-      estimand = estimand,
-      optim.method = optim.method,
-      prob.bound = prob.bound,
-      initial.CIFs = initial.CIFs,
-      use.parallel = TRUE
-    )
+    #  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
     ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 

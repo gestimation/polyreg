@@ -491,8 +491,8 @@ checkInput <- function(data, formula, code.event1, code.event2, code.censoring, 
   } else {
     report.boot.conf.corrected <- report.boot.conf
   }
-  order_choices <- c("PARALLEL","SEQUENTIAL")
-  computation.order.method <- match.arg(computation.order.method, choices = order_choices)
+#  order_choices <- c("PARALLEL","SEQUENTIAL")
+#  computation.order.method <- match.arg(computation.order.method, choices = order_choices)
   outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
   outer.optim.method <- match.arg(outer.optim.method, choices = outer_choices)
   inner_choices <- c("optim","BFGS","SANN","multiroot")

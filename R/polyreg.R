@@ -29,7 +29,7 @@
 #' @param optim.parameter2 integer Maximum number of iterations. Defaults to 20.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
 #' @param optim.parameter4 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
-#' @param optim.parameter5 integer Maximum number of iterations for nleqslv/optim in outer loop. Defaults to 200.
+#' @param optim.parameter5 integer Maximum number of iterations for nleqslv or optim in outer loop. Defaults to 200.
 #' @param optim.parameter6 numeric A threshold for determining convergence in inner loop. Defaults to 1e-10.
 #' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
 #' @param optim.parameter8 integer SD for random jitter in inner loop. Defaults to 2.5.
@@ -76,12 +76,12 @@ polyreg <- function(
     computation.order.batch.size = NULL,
     outer.optim.method = "nleqslv",
     inner.optim.method = "optim",
-    optim.parameter1 = 1e-5,
+    optim.parameter1 = 1e-3,
     optim.parameter2 = 20,
     optim.parameter3 = 100,
-    optim.parameter4 = 1e-5,
+    optim.parameter4 = 1e-3,
     optim.parameter5 = 200,
-    optim.parameter6 = 1e-10,
+    optim.parameter6 = 1e-8,
     optim.parameter7 = 200,
     optim.parameter8 = 2.5,
     optim.parameter9 = 2,
