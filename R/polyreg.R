@@ -81,7 +81,7 @@ polyreg <- function(
     optim.parameter3 = 100,
     optim.parameter4 = 1e-3,
     optim.parameter5 = 200,
-    optim.parameter6 = 1e-8,
+    optim.parameter6 = 1e-9,
     optim.parameter7 = 200,
     optim.parameter8 = 2.5,
     optim.parameter9 = 2,
