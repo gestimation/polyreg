@@ -7,8 +7,7 @@ calculatePotentialCIFs_parallel <- function(
     estimand,
     optim.method,
     prob.bound,
-    initial.CIFs = NULL,
-    use.parallel = TRUE
+    initial.CIFs = NULL
 ) {
 
   safe_exp <- function(x) {
