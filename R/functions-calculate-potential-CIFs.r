@@ -184,14 +184,7 @@ calculatePotentialCIFs_parallel <- function(
     mat
   }
 
-  # ---- 並列 or 逐次 ----
-  result_list <- if (use.parallel) {
-    future.apply::future_lapply(batch_indices, solve_CIF_batch, future.seed = TRUE)
-  } else {
-    lapply(batch_indices, solve_CIF_batch)
-  }
-
-  # ---- 結合・復元 ----
+  result_list <- future.apply::future_lapply(batch_indices, solve_CIF_batch, future.seed = TRUE)
   unique_CIFs <- do.call(rbind, result_list)
 
   # 万一の NA/Inf を最終保険で埋める
@@ -216,8 +209,7 @@ calculatePotentialCIFs_old <- function(
     estimand,
     optim.method,
     prob.bound,
-    initial.CIFs = NULL,
-    use.parallel = TRUE
+    initial.CIFs = NULL
 ) {
   i_parameter <- rep(NA_integer_, 7L)
   i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
