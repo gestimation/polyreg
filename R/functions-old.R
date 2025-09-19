@@ -1,7 +1,7 @@
 checkDependentPackages <- function(computation.order.method = c("SEQUENTIAL", "PARALLEL")) {
   computation.order.method <- match.arg(computation.order.method)
 
-  # 1) 依存確認（存在だけチェック）
+  # 1) 依存確認
   required_pkgs <- c("ggsurvfit", "Rcpp", "nleqslv", "boot")
   parallel_pkgs <- c("future", "future.apply")
   pkgs <- if (computation.order.method=="PARALLEL") {
