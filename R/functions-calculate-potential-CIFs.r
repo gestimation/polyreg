@@ -9,7 +9,6 @@ calculatePotentialCIFs_parallel <- function(
     prob.bound,
     initial.CIFs = NULL
 ) {
-
   safe_exp <- function(x) {
     x <- ifelse(is.finite(x), x, 700) # exp(700) ~ 1e304
     exp(x)

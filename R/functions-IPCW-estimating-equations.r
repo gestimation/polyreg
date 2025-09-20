@@ -1,3 +1,83 @@
+estimating_equation_ipcw_ <- function(
+    formula,
+    data,
+    exposure,
+    ip.weight,
+    alpha_beta,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  t <- data$t
+  epsilon <- data$epsilon
+  offset <- data$offset
+  x_a <- data$x_a
+  x_l <- data$x_l
+  i_parameter <- data$i_parameter
+
+  y_0 <- ifelse(epsilon == estimand$code.censoring | t > estimand$time.point, 1, 0)
+  y_1 <- ifelse(epsilon == estimand$code.event1 & t <= estimand$time.point, 1, 0)
+  y_2 <- ifelse(epsilon == estimand$code.event2 & t <= estimand$time.point, 1, 0)
+  y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
+  y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
+  y_2_ <- ifelse(epsilon == estimand$code.event2, 1, 0)
+  x_la <- cbind(x_l, x_a)
+
+  if (optim.method$computation.order.method=="SEQUENTIAL") {
+    potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  } else {
+    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  }
+  one <- rep(1, nrow(x_l))
+  a <- as.vector(x_a)
+  ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
+  ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
+
+  v11 <- ey_1 * (1 - ey_1)
+  v12 <- -ey_1 * ey_2
+  v22 <- ey_2 * (1 - ey_2)
+  denom <- v11*v22 - v12*v12
+  w11 <- v22 / denom
+  w12 <- -v12 / denom
+  w22 <- v11 / denom
+  wy_1 <- ip.weight * y_1
+  wy_2 <- ip.weight * y_2
+  r1 <- w11*(wy_1 - ey_1) + w12*(wy_2 - ey_2)
+  r2 <- w12*(wy_1 - ey_1) + w22*(wy_2 - ey_2)
+
+  n    <- nrow(x_la)
+  p_la <- ncol(x_la)
+  ret <- c(crossprod(x_la, r1), crossprod(x_la, r2)) / n
+  score.matrix <- matrix(0, nrow = 2 * n, ncol = 2 * p_la)
+  score.matrix[1:n, 1:p_la] <- x_la * r1
+  score.matrix[(n + 1):(2 * n), (p_la + 1):(2 * p_la)] <- x_la * r2
+
+  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
+  out <- list(
+    ret   = ret,
+    score = score.matrix,
+    ey_1  = ey_1,
+    ey_2  = ey_2,
+    w11   = w11,
+    w12   = w12,
+    w22   = w22,
+    t     = t,
+    y_0   = y_0,
+    y_1   = y_1,
+    y_2   = y_2,
+    y_0_  = y_0_,
+    y_1_  = y_1_,
+    y_2_  = y_2_,
+    x_a   = x_a,
+    x_l = x_l,
+    potential.CIFs = potential.CIFs,
+    ip.weight = ip.weight,
+    i_parameter = i_parameter
+  )
+  return(out)
+}
+
 estimating_equation_ipcw <- function(
     formula,
     data,

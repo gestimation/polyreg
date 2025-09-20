@@ -81,13 +81,14 @@ polyreg <- function(
     optim.parameter3 = 100,
     optim.parameter4 = 1e-3,
     optim.parameter5 = 200,
-    optim.parameter6 = 1e-9,
+    optim.parameter6 = 1e-8,
     optim.parameter7 = 200,
     optim.parameter8 = 2.5,
     optim.parameter9 = 2,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
-    prob.bound = 1e-5
+    prob.bound = 1e-5,
+    test=TRUE
 ) {
 
   #######################################################################################################
@@ -126,6 +127,7 @@ polyreg <- function(
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
   sorted_data <- sortByCovariate(nuisance.model, normalized_data, optim.method, out_normalizeCovariate$n_covariate)
+  sorted_data_ <- sortByCovariate_(nuisance.model, normalized_data, exposure, estimand, optim.method, out_normalizeCovariate$n_covariate)
 
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
@@ -197,23 +199,366 @@ polyreg <- function(
   #######################################################################################################
   # 4. Parameter estimation (functions: estimating_equation_ipcw, _survival, _proportional)
   #######################################################################################################
-  if (optim.method$computation.order.method == 'PARALLEL') future::plan(future::multisession)
-  makeObjectiveFunction <- function() {
+  if (optim.method$computation.order.method == "PARALLEL") {
+    future::plan(future::multisession)
+    on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
+  }
+
+  if (test) {
+    ## ─────────────────────────────────────────────────────────────
+    ## polyreg: 収束診断 強化 & 反復ループの簡素化（最小修正）
+    ## ─────────────────────────────────────────────────────────────
+
+    ## 1) 並列プランは必要時のみ（multisessionのコスト回避）
+    if (identical(optim.method$computation.order.method, "PARALLEL")) {
+      cur_plan <- tryCatch(future::plan(), error = function(e) NULL)
+      if (!inherits(cur_plan, "multisession")) {
+        future::plan(future::multisession)
+        on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
+      }
+    }
+
+    ## 2) 目的関数クロージャ（1回だけ生成）
+    makeObjectiveFunction <- function() {
+      out_ipcw <- list()
+      initial.CIFs <- NULL
+
+      call_and_capture <- function(fun, ...) {
+        out_ipcw <<- do.call(fun, list(...))
+        out_ipcw$ret
+      }
+
+      if (isTRUE(test)) {
+        estimating_equation_i <- function(p) call_and_capture(
+          estimating_equation_ipcw_,
+          formula = nuisance.model, data = sorted_data_, exposure = exposure,
+          ip.weight = ip.weight, alpha_beta = p, estimand = estimand,
+          optim.method = optim.method, prob.bound = prob.bound,
+          initial.CIFs = initial.CIFs
+        )
+      } else {
+        estimating_equation_i <- function(p) call_and_capture(
+          estimating_equation_ipcw,
+          formula = nuisance.model, data = sorted_data, exposure = exposure,
+          ip.weight = ip.weight, alpha_beta = p, estimand = estimand,
+          optim.method = optim.method, prob.bound = prob.bound,
+          initial.CIFs = initial.CIFs
+        )
+      }
+
+      estimating_equation_s <- function(p) call_and_capture(
+        estimating_equation_survival,
+        formula = nuisance.model, data = sorted_data, exposure = exposure,
+        ip.weight = ip.weight, alpha_beta = p, estimand = estimand,
+        prob.bound = prob.bound, initial.CIFs = initial.CIFs
+      )
+
+      estimating_equation_p <- function(p) call_and_capture(
+        estimating_equation_proportional,
+        formula = nuisance.model, data = sorted_data, exposure = exposure,
+        ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
+        optim.method = optim.method, prob.bound = prob.bound,
+        initial.CIFs = initial.CIFs
+      )
+
+      estimating_equation_pp <- function(p) call_and_capture(
+        estimating_equation_pproportional,
+        formula = nuisance.model, data = sorted_data, exposure = exposure,
+        ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
+        optim.method = optim.method, prob.bound = prob.bound,
+        initial.CIFs = initial.CIFs
+      )
+
+      setInitialCIFs <- function(new.CIFs) initial.CIFs <<- new.CIFs
+      getResults     <- function() out_ipcw
+
+      list(
+        estimating_equation_i = estimating_equation_i,
+        estimating_equation_s = estimating_equation_s,
+        estimating_equation_p = estimating_equation_p,
+        estimating_equation_pp = estimating_equation_pp,
+        setInitialCIFs = setInitialCIFs,
+        getResults = getResults
+      )
+    }
+
+    ## 収束診断 三条件 追加の最小修正パッチ
+
+    ## 目的関数クロージャはご提示どおり：
+    ##   obj <- makeObjectiveFunction()
+    iteration <- 0
+    max_param_diff  <- Inf
+    obj <- makeObjectiveFunction()   # ← ここで一度だけ生成
+    sol_list <- list()
+    diff_list <- list()
+    sol <- NULL
+
+    ## 追加: 収束しきい値とユーティリティ
+    tol_param <- optim.parameter1
+    tol_resid <- if (!is.null(optim.method$tolerance.residual)) optim.method$tolerance.residual else tol_param
+    stall_patience <- if (!is.null(optim.method$stall.patience)) optim.method$stall.patience else 3L
+    stall_eps <- if (!is.null(optim.method$stall.eps)) optim.method$stall.eps else 1e-3
+
+    rel_diff_fun <- function(new, old) {
+      max(abs(new - old) / pmax(1, abs(old)))
+    }
+    is_stalled <- function(hist) {
+      if (length(hist) < stall_patience) return(FALSE)
+      recent <- tail(hist, stall_patience)
+      (diff(range(recent)) / max(1e-12, mean(recent))) <= stall_eps
+    }
+
+    ## 追加: outcomeごとの目的関数（残差ノルム^2）評価器
+    get_obj_value <- switch(outcome.type,
+                            "COMPETING-RISK"   = function(p) drop(crossprod(obj$estimating_equation_i(p))),
+                            "SURVIVAL"         = function(p) drop(crossprod(obj$estimating_equation_s(p))),
+                            "BINOMIAL"         = function(p) drop(crossprod(obj$estimating_equation_s(p))), # 既存仕様踏襲
+                            "PROPORTIONAL"     = function(p) drop(crossprod(obj$estimating_equation_p(p))),
+                            "POLY-PROPORTIONAL"= function(p) drop(crossprod(obj$estimating_equation_pp(p))),
+                            stop("Unknown outcome.type: ", outcome.type)
+    )
+
+    iteration <- 0L
+    max_param_diff <- Inf
+    sol_list <- list(); diff_list <- list()
+    sol <- NULL
+    obj_hist <- numeric(0)
+
+    ## ===== COMPETING-RISK =====
+    if (outcome.type == "COMPETING-RISK") {
+      current_params <- alpha_beta_0
+      while ((iteration < optim.parameter2) & (max_param_diff > tol_param)) {
+        iteration <- iteration + 1L
+
+        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
+          sol <- nleqslv(current_params, obj$estimating_equation_i, method="Broyden",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "Newton"){
+          sol <- nleqslv(current_params, obj$estimating_equation_i, method="Newton",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "multiroot") {
+          sol <- multiroot(obj$estimating_equation_i, start = current_params,
+                           maxiter=optim.parameter5, rtol = optim.parameter4)
+          new_params <- sol$root
+        } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_i(params))),
+                       method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        } else if (outer.optim.method == "BFGS"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_i(params))),
+                       method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        }
+
+        if (any(abs(new_params) > optim.parameter3)) {
+          stop("Estimates are either too large or too small, and convergence might not be achieved.")
+        }
+
+        ## ここから収束診断(三条件)
+        param_diff <- abs(new_params - current_params)
+        max_param_diff <- max(param_diff)
+        rel_diff <- rel_diff_fun(new_params, current_params)
+        obj_val <- get_obj_value(new_params)
+        obj_hist <- c(obj_hist, obj_val)
+
+        ## 状態更新（Warm startのため先に更新する）
+        current_params <- new_params
+        obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+        sol_list[[iteration]] <- sol
+        diff_list[[iteration]] <- max_param_diff
+
+        ## 停止条件：相対差 or 残差 or 停滞
+        if ((rel_diff <= tol_param) || (obj_val <= tol_resid^2) || is_stalled(obj_hist)) break
+      }
+
+      ## ===== SURVIVAL / BINOMIAL =====
+    } else if (outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
+      current_params <- alpha_beta_0
+      while ((iteration < optim.parameter2) & (max_param_diff > tol_param)) {
+        iteration <- iteration + 1L
+
+        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
+          sol <- nleqslv(current_params, obj$estimating_equation_s, method="Broyden",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "Newton"){
+          sol <- nleqslv(current_params, obj$estimating_equation_s, method="Newton",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "multiroot") {
+          sol <- multiroot(obj$estimating_equation_s, start = current_params,
+                           maxiter=optim.parameter5, rtol=optim.parameter4)
+          new_params <- sol$root
+        } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_s(params))),
+                       method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        } else if (outer.optim.method == "BFGS"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_s(params))),
+                       method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        }
+
+        if (any(abs(new_params) > optim.parameter3)) {
+          stop("Estimates are either too large or too small, and convergence might not be achieved.")
+        }
+
+        param_diff <- abs(new_params - current_params)
+        max_param_diff <- max(param_diff)
+        rel_diff <- rel_diff_fun(new_params, current_params)
+        obj_val <- get_obj_value(new_params)
+        obj_hist <- c(obj_hist, obj_val)
+
+        current_params <- new_params
+        obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+        sol_list[[iteration]] <- sol
+        diff_list[[iteration]] <- max_param_diff
+
+        if ((rel_diff <= tol_param) || (obj_val <= tol_resid^2) || is_stalled(obj_hist)) break
+      }
+
+      ## ===== PROPORTIONAL =====
+    } else if (outcome.type == "PROPORTIONAL") {
+      current_params <- alpha_beta_0
+      while ((iteration < optim.parameter2) & (max_param_diff > tol_param)) {
+        iteration <- iteration + 1L
+
+        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
+          sol <- nleqslv(current_params, obj$estimating_equation_p, method="Broyden",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "Newton"){
+          sol <- nleqslv(current_params, obj$estimating_equation_p, method="Newton",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "multiroot") {
+          sol <- multiroot(obj$estimating_equation_p, start = current_params,
+                           maxiter=optim.parameter5, rtol=optim.parameter4)
+          new_params <- sol$root
+        } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_p(params))),
+                       method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        } else if (outer.optim.method == "BFGS"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_p(params))),
+                       method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        }
+
+        if (any(abs(new_params) > optim.parameter3)) {
+          stop("Estimates are either too large or too small, and convergence might not be achieved.")
+        }
+
+        param_diff <- abs(new_params - current_params)
+        max_param_diff <- max(param_diff)
+        rel_diff <- rel_diff_fun(new_params, current_params)
+        obj_val <- get_obj_value(new_params)
+        obj_hist <- c(obj_hist, obj_val)
+
+        current_params <- new_params
+        obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+        sol_list[[iteration]] <- sol
+        diff_list[[iteration]] <- max_param_diff
+
+        if ((rel_diff <= tol_param) || (obj_val <= tol_resid^2) || is_stalled(obj_hist)) break
+      }
+
+      ## ===== POLY-PROPORTIONAL =====
+    } else if (outcome.type == "POLY-PROPORTIONAL") {
+      current_params <- alpha_beta_0
+      while ((iteration < optim.parameter2) & (max_param_diff > tol_param)) {
+        iteration <- iteration + 1L
+
+        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
+          sol <- nleqslv(current_params, obj$estimating_equation_pp, method="Broyden",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "Newton"){
+          sol <- nleqslv(current_params, obj$estimating_equation_pp, method="Newton",
+                         control=list(maxit=optim.parameter5, allowSingular=FALSE))
+          new_params <- sol$x
+        } else if (outer.optim.method == "multiroot") {
+          sol <- multiroot(obj$estimating_equation_pp, start = current_params,
+                           maxiter=optim.parameter5, rtol=optim.parameter4)
+          new_params <- sol$root
+        } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_pp(params))),
+                       method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        } else if (outer.optim.method == "BFGS"){
+          sol <- optim(par = current_params,
+                       fn = function(params) drop(crossprod(obj$estimating_equation_pp(params))),
+                       method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
+          new_params <- sol$par
+        }
+
+        if (any(abs(new_params) > optim.parameter3)) {
+          stop("Estimates are either too large or too small, and convergence might not be achieved.")
+        }
+
+        param_diff <- abs(new_params - current_params)
+        max_param_diff <- max(param_diff)
+        rel_diff <- rel_diff_fun(new_params, current_params)
+        obj_val <- get_obj_value(new_params)
+        obj_hist <- c(obj_hist, obj_val)
+
+        current_params <- new_params
+        obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+        sol_list[[iteration]] <- sol
+        diff_list[[iteration]] <- max_param_diff
+
+        if ((rel_diff <= tol_param) || (obj_val <= tol_resid^2) || is_stalled(obj_hist)) break
+      }
+    }
+
+    obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+    sol_list[[iteration]] <- sol
+    diff_list[[iteration]] <- max_param_diff
+
+  } else {
+
+  makeObjectiveFunction <- function() {  # ← ループ外で一度だけ作成
     out_ipcw <- list()
     initial.CIFs <- NULL
-    estimating_equation_i <- function(p) {
-      out_ipcw <- estimating_equation_ipcw(
-        formula = nuisance.model,
-        data = sorted_data,
-        exposure = exposure,
-        ip.weight = ip.weight,
-        alpha_beta = p,
-        estimand = estimand,
-        optim.method = optim.method,
-        prob.bound = prob.bound,
-        initial.CIFs = initial.CIFs)
-      out_ipcw <<- out_ipcw
-      return(out_ipcw$ret)
+    if (test) {
+      estimating_equation_i <- function(p) {
+        out_ipcw <- estimating_equation_ipcw_(
+          formula = nuisance.model,
+          data = sorted_data_,
+          exposure = exposure,
+          ip.weight = ip.weight,
+          alpha_beta = p,
+          estimand = estimand,
+          optim.method = optim.method,
+          prob.bound = prob.bound,
+          initial.CIFs = initial.CIFs)
+        out_ipcw <<- out_ipcw
+        return(out_ipcw$ret)
+      }
+    } else {
+      estimating_equation_i <- function(p) {
+        out_ipcw <- estimating_equation_ipcw(
+          formula = nuisance.model,
+          data = sorted_data,
+          exposure = exposure,
+          ip.weight = ip.weight,
+          alpha_beta = p,
+          estimand = estimand,
+          optim.method = optim.method,
+          prob.bound = prob.bound,
+          initial.CIFs = initial.CIFs)
+        out_ipcw <<- out_ipcw
+        return(out_ipcw$ret)
+      }
     }
     estimating_equation_s <- function(p) {
       out_ipcw <- estimating_equation_survival(
@@ -274,7 +619,7 @@ polyreg <- function(
 
   iteration <- 0
   max_param_diff  <- Inf
-  obj <- makeObjectiveFunction()
+  obj <- makeObjectiveFunction()   # ← ここで一度だけ生成
   sol_list <- list()
   diff_list <- list()
   sol <- NULL
@@ -295,7 +640,7 @@ polyreg <- function(
       } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_i(params)^2)
+                       drop(crossprod(obj$estimating_equation_i(params)))  # ← ここだけ差し替え
                      },
                      method = "SANN",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -303,7 +648,7 @@ polyreg <- function(
       } else if (outer.optim.method == "BFGS"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_i(params)^2)
+                       drop(crossprod(obj$estimating_equation_i(params)))  # ← ここだけ差し替え
                      },
                      method = "BFGS",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -331,12 +676,12 @@ polyreg <- function(
         sol <- nleqslv(current_params, obj$estimating_equation_s, method="Newton", control=list(maxit=optim.parameter5, allowSingular=FALSE))
         new_params <- sol$x
       } else if (outer.optim.method == "multiroot") {
-        sol <- multiroot(obj$estimating_equation_s, start = current_params, maxiter=optim.parameter5, rtol = optim.parameter4)
+        sol <- multiroot(obj$estimating_equation_s, start = current_params, maxiter=optim.parameter5, rtol=optim.parameter4)
         new_params <- sol$root
       } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_s(params)^2)
+                       drop(crossprod(obj$estimating_equation_s(params)))  # ← 差し替え
                      },
                      method = "SANN",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -344,7 +689,7 @@ polyreg <- function(
       } else if (outer.optim.method == "BFGS"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_s(params)^2)
+                       drop(crossprod(obj$estimating_equation_s(params)))  # ← 差し替え
                      },
                      method = "BFGS",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -377,7 +722,7 @@ polyreg <- function(
       } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_p(params)^2)
+                       drop(crossprod(obj$estimating_equation_p(params)))  # ← 差し替え
                      },
                      method = "SANN",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -385,7 +730,7 @@ polyreg <- function(
       } else if (outer.optim.method == "BFGS"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_p(params)^2)
+                       drop(crossprod(obj$estimating_equation_p(params)))  # ← 差し替え
                      },
                      method = "BFGS",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -418,7 +763,7 @@ polyreg <- function(
       } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_pp(params)^2)
+                       drop(crossprod(obj$estimating_equation_pp(params)))  # ← 差し替え
                      },
                      method = "SANN",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -426,7 +771,7 @@ polyreg <- function(
       } else if (outer.optim.method == "BFGS"){
         sol <- optim(par = current_params,
                      fn = function(params) {
-                       sum(obj$estimating_equation_pp(params)^2)
+                       drop(crossprod(obj$estimating_equation_pp(params)))  # ← 差し替え
                      },
                      method = "BFGS",  control = list(maxit=optim.parameter5, reltol=optim.parameter4)
         )
@@ -444,6 +789,7 @@ polyreg <- function(
       diff_list[[iteration]] <- max_param_diff
     }
   }
+}
   out_getResults <- obj$getResults()
 
   #######################################################################################################

@@ -239,6 +239,50 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
   return(out)
 }
 
+sortByCovariate_ <- function(formula, data, exposure, estimand, optim.method, n_covariate) {
+  if (optim.method$computation.order.method == "SEQUENTIAL" & n_covariate>0) {
+    terms_obj <- terms(formula)
+    covariate_names <- attr(terms_obj, "term.labels")
+    missing_vars <- setdiff(covariate_names, names(data))
+    if (length(missing_vars) > 0) {
+      stop("The following covariates are missing: ", paste(missing_vars, collapse = ", "))
+    }
+    data <- data[do.call(order, data[covariate_names]), , drop = FALSE]
+  }
+
+  cl <- match.call()
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "cluster", "offset")
+  Terms <- terms(formula, special, data = data)
+  mf$formula <- Terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  t <- Y[, 1]  # time variable
+  epsilon <- Y[, 2]  # status variable
+  if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
+    ts <- survival::untangle.specials(Terms, "offset")
+    if (length(ts$vars) > 0) {
+      Terms <- Terms[-ts$terms]
+      offset <- mf[[ts$vars]]
+    } else {
+      offset <- rep(0, nrow(mf))
+    }
+  } else {
+    offset <- rep(0, nrow(mf))
+  }
+  a_ <- as.factor(data[[exposure]])
+  if (estimand$code.exposure.ref==0) {
+    x_a <- as.matrix(model.matrix(~ a_)[, -1])
+  } else {
+    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
+  }
+  x_l <- model.matrix(Terms, mf)
+  i_parameter <- rep(NA, 7)
+  i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
+  return(list(t=t, epsilon=epsilon, offset=offset, x_a=x_a, x_l=x_l, i_parameter=i_parameter))
+}
+
 sortByCovariate <- function(formula, data, optim.method, n_covariate) {
   if (optim.method$computation.order.method == "SEQUENTIAL" & n_covariate>0) {
     terms_obj <- terms(formula)
