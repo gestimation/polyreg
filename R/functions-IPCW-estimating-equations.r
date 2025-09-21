@@ -49,10 +49,13 @@ estimating_equation_ipcw <- function(
   i_parameter <- rep(NA, 7)
   i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
-  if (optim.method$computation.order.method=="OLD") {
+  if (optim.method$computation.order.method=="SEQUENTIAL") {
     potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+  } else if (optim.method$computation.order.method=="PARALLEL") {
+#    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,i_parameter,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialCIFs_LM(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   } else {
-    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialCIFs_tinyLM(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   }
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
@@ -77,7 +80,8 @@ estimating_equation_ipcw <- function(
   tmp2 <- cbind(zero, x_la)
   d    <- rbind(tmp1, tmp2)
   residual <- c(wy_1ey_1, wy_2ey_2)
-  ret <- as.vector(t(d) %*% residual / nrow(x_l))
+  ret <- drop(crossprod(d, residual)) / nrow(x_l)
+  #ret <- as.vector(t(d) %*% residual / nrow(x_l))
 
   n_col_d <- ncol(d)
   score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
@@ -157,20 +161,25 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   }
 
   out_calculateD <- calculateD(potential.CIFs, x_a, x_l, estimand, prob.bound)
-  hesse_d11 <- t(x_la) %*% (w11 * out_calculateD$d_11) / n
-  hesse_d12 <- t(x_la) %*% (w12 * out_calculateD$d_12) / n
-  hesse_d22 <- t(x_la) %*% (w22 * out_calculateD$d_22) / n
+  hesse_d11 <- crossprod(x_la, w11 * out_calculateD$d_11) / n
+  hesse_d12 <- crossprod(x_la, w12 * out_calculateD$d_12) / n
+  hesse_d22 <- crossprod(x_la, w22 * out_calculateD$d_22) / n
+  #hesse_d11 <- t(x_la) %*% (w11 * out_calculateD$d_11) / n
+  #hesse_d12 <- t(x_la) %*% (w12 * out_calculateD$d_12) / n
+  #hesse_d22 <- t(x_la) %*% (w22 * out_calculateD$d_22) / n
 
   hesse_d1 <- cbind(hesse_d11, hesse_d12)
   hesse_d2 <- cbind(hesse_d12, hesse_d22)
   hesse <- rbind(hesse_d1, hesse_d2)
 
   total_score <- cbind(AB1, AB2)
-  influence.function <- total_score %*% t(solve(hesse))
-  cov_estimated <- t(influence.function) %*% influence.function / n / n
+  influence.function <- t(solve(hesse, t(total_score)))
+  cov_estimated <- crossprod(influence.function) / n^2
+  #influence.function <- total_score %*% t(solve(hesse))
+  #cov_estimated <- t(influence.function) %*% influence.function / n / n
   if (ncol(influence.function)==4) {
     colnames(influence.function) <- c("intercept", "exposure", "intercept", "exposure")
-  } else {
+  } else if (ncol(influence.function)>4) {
     colnames(influence.function) <- c("intercept", paste("covariate", 1:(ncol(influence.function)/2 - 2), sep = ""), "exposure",
                                       "intercept", paste("covariate", 1:(ncol(influence.function)/2 - 2), sep = ""), "exposure")
   }
@@ -285,7 +294,8 @@ estimating_equation_survival <- function(
   wy_1ey_1 <- w11*(wy_1 - ey_1)
   d <- cbind(x_l, x_a)
   residual <- wy_1ey_1
-  ret <- as.vector(t(d) %*% residual / nrow(x_l))
+  ret <- drop(crossprod(d, residual)) / nrow(x_l)
+  #ret <- as.vector(t(d) %*% residual / nrow(x_l))
 
   n_col_d <- ncol(d)
   score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
@@ -347,10 +357,19 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
     }
   }
   out_calculateDSurvival <- calculateDSurvival(potential.CIFs, x_a, x_l, estimand, prob.bound)
-  hesse <- t(x_la) %*% (w11 * out_calculateDSurvival) / n
+#  hesse <- t(x_la) %*% (w11 * out_calculateDSurvival) / n
+  hesse <- crossprod(x_la, w11 * out_calculateDSurvival) / n
+
   total_score <- AB1
-  influence.function <- total_score %*% t(solve(hesse))
-  cov_estimated <- t(influence.function) %*% influence.function / n / n
+  #influence.function <- total_score %*% t(solve(hesse))
+  #cov_estimated <- t(influence.function) %*% influence.function / n / n
+  influence.function <- t(solve(hesse, t(total_score)))
+  cov_estimated <- crossprod(influence.function) / n^2
+  if (ncol(influence.function)==2) {
+    colnames(influence.function) <- c("intercept", "exposure")
+  } else if (ncol(influence.function)>2) {
+    colnames(influence.function) <- c("intercept", paste("covariate", 1:(ncol(influence.function) - 2), sep = ""), "exposure")
+  }
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 
@@ -619,7 +638,8 @@ estimating_equation_pproportional <- function(
     d    <- rbind(tmp1, tmp2)
 
     residual <- c(wy_1ey_1, wy_2ey_2)
-    subscore <- as.matrix(t(d) %*% residual / nrow(x_l))
+    #subscore <- as.matrix(t(d) %*% residual / nrow(x_l))
+    subscore <- crossprod(d, residual) / nrow(x_l)
     #tmp1 <- t(subscore[1:n_para_1,])
     #tmp2 <- t(subscore[n_para_3:n_para_4,])
     #score_beta <- cbind(score_beta, tmp1, tmp2)
@@ -679,3 +699,332 @@ calculateNelsonAalen <- function(t, d) {
   return(na)
 }
 
+## ===== 0) ユーティリティ（必要なら流用） ==========================
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+clampP <- function(p, bound) {
+  # 確率ベクトル p を [bound, 1-bound] にクランプしつつ、(1-p1-p2) も安全化
+  p <- pmax(bound, pmin(1 - bound, p))
+  p
+}
+clampLogP <- function(lp, bound = 0) {
+  # log確率に軽い下駄（必要なら bound を利用）
+  # 既存の clampLogP があるならそちらを使ってOK
+  lp
+}
+
+## ===== 1) effect.measure の小カーネルを作るファクトリー ===========
+## idx = (i,j) は (1,3) or (2,4) のペアを想定
+make_effect_kernel <- function(measure, idx) {
+  i <- idx[1]; j <- idx[2]
+  if (measure == "RR") {
+    res <- function(p, clogp, beta) {
+      beta - clogp[j] + clogp[i]
+    }
+    jac <- function(p, clogp, beta) {
+      g <- numeric(4); g[i] <-  1; g[j] <- -1; g
+    }
+  } else if (measure == "OR") {
+    res <- function(p, clogp, beta) {
+      beta - clogp[j] + clogp[i] + log1p(-p[j]) - log1p(-p[i])
+    }
+    jac <- function(p, clogp, beta) {
+      g <- numeric(4)
+      g[i] <-  1 +  p[i]/(1 - p[i])
+      g[j] <- -1 + (-p[j]/(1 - p[j]))
+      g
+    }
+  } else if (measure == "SHR" || identical(measure, "")) {
+    res <- function(p, clogp, beta) {
+      exp(beta) - (log1p(-p[j]) / log1p(-p[i]))
+    }
+    jac <- function(p, clogp, beta) {
+      # ∂/∂log p ： d p / d log p = p
+      g <- numeric(4)
+      Bi <- log1p(-p[i])  # < 0
+      Bj <- log1p(-p[j])
+      # d/d log p_i of [-log(1-p_j)/log(1-p_i)] =  (Bj * (-p_i/(1-p_i))) / Bi^2
+      g[i] <-  ( Bj * (-p[i]/(1 - p[i])) ) / (Bi^2)
+      # d/d log p_j of [-log(1-p_j)/log(1-p_i)] =  p_j / ((1-p_j) * Bi)
+      g[j] <-   p[j] / ((1 - p[j]) * Bi)
+      g
+    }
+  } else {
+    stop("Invalid measure: must be 'RR','OR','SHR' (or '' as SHR).")
+  }
+  list(res = res, jac = jac, idx = c(i, j))
+}
+
+## ===== 2) 残差・ヤコビアン（本体は分岐なし、カーネル差し替え） ====
+residuals_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2,
+                                   estimand, prob.bound, k1, k2) {
+  clogp <- clampLogP(as.numeric(log_p))
+  if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
+  p <- exp(clogp)
+
+  rem12 <- max(1 - p[1] - p[2], prob.bound)
+  rem34 <- max(1 - p[3] - p[4], prob.bound)
+  lp0102 <- log(rem12) + log(rem34)
+
+  r <- numeric(4)
+  # 共通部（ret1, ret3）
+  r[1] <- alpha1 - clogp[1] - clogp[3] + lp0102
+  r[3] <- alpha2 - clogp[2] - clogp[4] + lp0102
+  # 差分部（ret2, ret4）はカーネルで
+  r[2] <- k1$res(p, clogp, beta1)
+  r[4] <- k2$res(p, clogp, beta2)
+  r
+}
+
+jacobian_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2,
+                                  estimand, prob.bound, k1, k2) {
+  clogp <- clampLogP(as.numeric(log_p))
+  if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
+  p <- exp(clogp)
+
+  rem12 <- max(1 - p[1] - p[2], prob.bound)
+  rem34 <- max(1 - p[3] - p[4], prob.bound)
+
+  dlp12 <- c(-p[1]/rem12, -p[2]/rem12)  # ∂/∂logp log(1-p1-p2)
+  dlp34 <- c(-p[3]/rem34, -p[4]/rem34)
+
+  J <- matrix(0.0, 4, 4)
+  # 共通部（ret1, ret3 のヤコビアン）
+  J[1,] <- c(-1 + dlp12[1], dlp12[2], -1 + dlp34[1], dlp34[2])
+  J[3,] <- c(dlp12[1], -1 + dlp12[2], dlp34[1], -1 + dlp34[2])
+  # 差分部（ret2, ret4）
+  J[2,] <- k1$jac(p, clogp, beta1)
+  J[4,] <- k2$jac(p, clogp, beta2)
+  J
+}
+
+## ===== 3) 4×4専用・極小LM（base Rのみ） =============================
+## ── 4×4 専用 Levenberg–Marquardt（堅牢版）──
+## * nls.lm 相当の挙動（ρで λ を更新）
+## * line search 付き
+## * base R のみ（chol/backsolve/forwardsolve/crossprod）
+tiny_lm4_robust <- function(start,
+                            res_fun, jac_fun,
+                            maxit = 100L,
+                            ftol  = 1e-10,
+                            ptol  = 1e-10,
+                            lambda0    = 1e-3,
+                            lambda_min = 1e-12,
+                            lambda_max = 1e12,
+                            eta_inc    = 2.0,
+                            eta_dec    = 0.5,
+                            do_linesearch = TRUE,
+                            ls_c      = 1e-4,
+                            ls_shrink = 0.5,
+                            verbose   = FALSE) {
+  ## 初期化
+  lp   <- as.numeric(start)
+  r    <- res_fun(lp)
+  f2   <- drop(crossprod(r))            # ||r||^2
+  J    <- jac_fun(lp)
+  g    <- drop(crossprod(J, r))         # J^T r
+  lam  <- lambda0
+  prev_f2 <- Inf                        # 直前の目的関数値
+
+  if (isTRUE(verbose)) {
+    hist <- list(it=integer(), f2=double(),
+                 grad_inf=double(), lambda=double(),
+                 step_norm=double(), rho=double())
+  }
+
+  for (k in seq_len(maxit)) {
+    ## 停止1: 勾配ノルム
+    grad_inf <- max(abs(g))
+    if (is.finite(grad_inf) && grad_inf < 1e-6) break
+
+    ## (J^T J + λI) δ = -J^T r
+    A <- crossprod(J)
+    diag(A) <- diag(A) + lam
+    R <- try(chol(A), silent = TRUE)
+    if (inherits(R, "try-error")) {
+      lam <- min(lam * 10, lambda_max)
+      next
+    }
+    delta <- -backsolve(R, forwardsolve(t(R), g))
+    step_norm <- max(abs(delta))
+
+    ## 停止2: ステップが小さい
+    if (is.finite(step_norm) &&
+        step_norm <= ptol * (ptol + max(1, max(abs(lp))))) break
+
+    ## 予測減少（LM モデル）
+    pred <- 0.5 * sum(delta * (lam * delta - g))
+    if (!is.finite(pred) || pred <= 0) pred <- .Machine$double.eps
+
+    ## 候補点
+    lp_try <- lp + delta
+    r_try  <- res_fun(lp_try)
+    f2_try <- drop(crossprod(r_try))
+
+    ## ρ = 実際の減少 / 予測減少
+    rho <- (f2 - f2_try) / pred
+    accepted <- FALSE
+
+    if (is.finite(rho) && rho > 0) {
+      ## 受容 → λを減らす
+      lp <- lp_try; r <- r_try; f2 <- f2_try
+      lam <- max(lambda_min, lam * max(eta_dec, 1/(1 + rho)))
+      accepted <- TRUE
+    } else {
+      ## 不受容 → λを増やす
+      lam <- min(lambda_max, lam * (eta_inc * (1 + abs(ifelse(is.finite(rho), rho, 0)))))
+      if (do_linesearch) {
+        ## Armijo 型ラインサーチ
+        t <- 1.0; gTd <- sum(g * delta)
+        while (t > 1e-6) {
+          lp_ls <- lp + t * delta
+          r_ls  <- res_fun(lp_ls)
+          f2_ls <- drop(crossprod(r_ls))
+          if (is.finite(f2_ls) &&
+              f2_ls <= f2 + ls_c * t * gTd) {
+            lp <- lp_ls; r <- r_ls; f2 <- f2_ls
+            accepted <- TRUE
+            break
+          }
+          t <- t * ls_shrink
+        }
+      }
+    }
+
+    ## 次イテレーション用に更新
+    J <- jac_fun(lp)
+    g <- drop(crossprod(J, r))
+
+    ## 停止3: 目的関数の変化が小さい
+    if (k > 1L &&
+        is.finite(prev_f2) && is.finite(f2) &&
+        abs(prev_f2 - f2) <= ftol * (abs(f2) + ftol)) break
+
+    ## ログ
+    if (isTRUE(verbose)) {
+      hist$it        <- c(hist$it, k)
+      hist$f2        <- c(hist$f2, f2)
+      hist$grad_inf  <- c(hist$grad_inf, grad_inf)
+      hist$lambda    <- c(hist$lambda, lam)
+      hist$step_norm <- c(hist$step_norm, step_norm)
+      hist$rho       <- c(hist$rho, if (exists("rho")) rho else NA_real_)
+    }
+
+    prev_f2 <- f2
+  }
+
+  if (isTRUE(verbose)) attr(lp, "history") <- hist
+  lp
+}
+
+## ===== 4) 観測1件用の小ラッパ ================================
+# NULL 合体演算子（未定義ならこれも定義しておく）
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+# 方法A：明示指定で tiny_lm4_robust を呼ぶ安全版ラッパ
+solve_one_CIFs_tinyLM <- function(start_lp,
+                                  alpha1, beta1, alpha2, beta2,
+                                  estimand, prob.bound,
+                                  k1, k2,
+                                  ctrl = list()) {
+  # 残差・ヤコビアン（分岐なし、本体は共通）
+  res_fun <- function(lp) residuals_CIFs_generic(lp, alpha1, beta1, alpha2, beta2,
+                                                 estimand, prob.bound, k1, k2)
+  jac_fun <- function(lp) jacobian_CIFs_generic(lp, alpha1, beta1, alpha2, beta2,
+                                                estimand, prob.bound, k1, k2)
+
+  # 必要なパラメータだけ明示的に拾って渡す（他は無視）
+  lp_hat <- tiny_lm4_robust(
+    start         = start_lp,
+    res_fun       = res_fun,
+    jac_fun       = jac_fun,
+    maxit         = ctrl$maxit        %||% 100L,
+    ftol          = ctrl$ftol         %||% 1e-10,
+    ptol          = ctrl$ptol         %||% 1e-10,
+    lambda0       = ctrl$lambda0      %||% 1e-3,
+    lambda_min    = ctrl$lambda_min   %||% 1e-12,
+    lambda_max    = ctrl$lambda_max   %||% 1e12,
+    eta_inc       = ctrl$eta_inc      %||% 2.0,     # ρ<0 等でλを増やす倍率
+    eta_dec       = ctrl$eta_dec      %||% 0.5,     # ρ>0 でλを減らす倍率
+    do_linesearch = ctrl$do_linesearch%||% TRUE,
+    ls_c          = ctrl$ls_c         %||% 1e-4,
+    ls_shrink     = ctrl$ls_shrink    %||% 0.5,
+    verbose       = ctrl$verbose      %||% FALSE
+  )
+
+  lp_hat
+}
+
+## ===== 5) drop-in 置換: calculatePotentialCIFs_* =====================
+## 旧 calculatePotentialCIFs_old と同じ役割＆返り値
+calculatePotentialCIFs_tinyLM <- function(
+    alpha_beta_tmp,
+    x_a, x_l, offset, epsilon,
+    estimand, optim.method, prob.bound,
+    initial.CIFs = NULL,
+    lm_ctrl = list(maxit=30L, ftol=1e-10, ptol=1e-10,
+                   lambda0=1e-3, lambda_up=10, lambda_down=0.1)
+) {
+  # 0) effect.measure を一度だけ固定（以降分岐なし）
+  k1 <- make_effect_kernel(estimand$effect.measure1, c(1,3))
+  k2 <- make_effect_kernel(estimand$effect.measure2 %||% "SHR", c(2,4))
+
+  # 1) パラメータ分割
+  i_parameter <- rep(NA_integer_, 7L)
+  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+  alpha_1    <- alpha_beta_tmp[seq_len(i_parameter[1])]
+  beta_tmp_1 <- alpha_beta_tmp[seq.int(i_parameter[2], i_parameter[3])]
+  alpha_2    <- alpha_beta_tmp[seq.int(i_parameter[4], i_parameter[5])]
+  beta_tmp_2 <- alpha_beta_tmp[seq.int(i_parameter[6], i_parameter[7])]
+
+  # 2) 線形予測子
+  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
+  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
+
+  # 3) 初期確率（安全化）
+  n  <- length(epsilon)
+  p0 <- c(
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
+  )
+  p0     <- clampP(p0, prob.bound)
+  log_p0 <- log(p0)
+
+  # 4) 全行ユニーク化キャッシュ（baseのみ）
+  keys <- apply(x_l, 1, function(r) paste0(r, collapse = "\r"))
+  uniq <- match(keys, unique(keys))
+  cache_lp <- vector("list", length = max(uniq))
+
+  out <- matrix(NA_real_, nrow = nrow(x_l), ncol = 4L)
+
+  for (i in seq_len(nrow(x_l))) {
+    k <- uniq[i]
+
+    if (!is.null(cache_lp[[k]])) {
+      lp_hat <- cache_lp[[k]]
+    } else {
+      ip <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, 1:4, drop = FALSE]) else exp(log_p0)
+      start_lp <- log(clampP(ip, prob.bound))
+
+      lp_hat <- solve_one_CIFs_tinyLM(
+        start_lp  = start_lp,
+        alpha1    = alpha_tmp_1[i],
+        beta1     = beta_tmp_1,
+        alpha2    = alpha_tmp_2[i],
+        beta2     = beta_tmp_2,
+        estimand  = estimand,
+        prob.bound = prob.bound,
+        k1 = k1, k2 = k2,
+        ctrl = lm_ctrl
+      )
+      cache_lp[[k]] <- lp_hat
+    }
+
+    out[i, ] <- clampP(exp(lp_hat), prob.bound)
+  }
+
+  colnames(out) <- c("p10", "p20", "p11", "p21")
+  out
+}

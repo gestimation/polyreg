@@ -1,43 +1,3 @@
-checkDependentPackages <- function(computation.order.method = c("SEQUENTIAL", "PARALLEL")) {
-  computation.order.method <- match.arg(computation.order.method)
-
-  # 1) 依存確認（存在だけチェック）
-  required_pkgs <- c("ggsurvfit", "Rcpp", "nleqslv", "boot")
-  parallel_pkgs <- c("future", "future.apply")
-  pkgs <- if (computation.order.method=="PARALLEL") {
-    c(required_pkgs, parallel_pkgs)
-  } else {
-    required_pkgs
-  }
-
-  missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(missing_pkgs) > 0) {
-    stop("Required packages not installed: ", paste(missing_pkgs, collapse = ", "))
-  }
-
-  # 2) 並列プラン（必要なときだけ設定）
-  if (computation.order.method=="PARALLEL") {
-    # すでに multisession でなければ設定
-    current_plan <- future::plan("list")[[1]]  # 現行ストラテジ関数
-    if (!inherits(current_plan, "multisession")) {
-      future::plan(future::multisession)
-    }
-    # RNG 再現性が必要なら（任意）
-    # RNGkind("L'Ecuyer-CMRG")  # 呼び出し側で行うなら削除してOK
-  }
-
-  invisible(TRUE)
-}
-
-checkDependentPackages_old <- function() {
-  if (requireNamespace("ggsurvfit", quietly = TRUE) & requireNamespace("Rcpp", quietly = TRUE)) {
-    suppressWarnings(library(ggsurvfit))
-    suppressWarnings(library(Rcpp))
-  } else {
-    stop("Required packages 'ggsurvfit' and/or 'Rcpp' are not installed.")
-  }
-}
-
 Surv <- function(time, event) {
   if (missing(time))
     stop("Must have a time argument")
@@ -238,7 +198,6 @@ createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_prese
   return(data.frame(id = 1:n, t = t, epsilon = epsilon, d = d, w = w, strata = strata, subset=subset))
 }
 
-
 normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type) {
   mf <- model.frame(formula, data)
   Y <- model.extract(mf, "response")
@@ -281,21 +240,6 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
 
 sortByCovariate <- function(formula, data, optim.method, n_covariate) {
   if (optim.method$computation.order.method == "SEQUENTIAL" & n_covariate>0) {
-    terms_obj <- terms(formula)
-    covariate_names <- attr(terms_obj, "term.labels")
-    missing_vars <- setdiff(covariate_names, names(data))
-    if (length(missing_vars) > 0) {
-      stop("The following covariates are missing: ", paste(missing_vars, collapse = ", "))
-    }
-    sorted_data <- data[do.call(order, data[covariate_names]), , drop = FALSE]
-    return(sorted_data)
-  } else {
-    return(data)
-  }
-}
-
-sortByCovariate_old <- function(formula, data, should.sort.data, n_covariate) {
-  if (should.sort.data == TRUE & n_covariate>0) {
     terms_obj <- terms(formula)
     covariate_names <- attr(terms_obj, "term.labels")
     missing_vars <- setdiff(covariate_names, names(data))
@@ -369,92 +313,6 @@ checkInput_new <- function(outcome.type, conf.level, report.boot.conf, outer.opt
     outer.optim.method = outer.optim.method,
     inner.optim.method = inner.optim.method
   )
-}
-
-checkInput_old <- function(outcome.type, time.point, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
-  if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL") {
-    if (length(time.point)>1) {
-      time.point <<- max(time.point)
-    } else if (is.null(time.point)) {
-      stop("Invalid input for time.point when outcome.type is COMPETING-RISK or SURVIVAL.")
-    } else if (min(time.point)<0) {
-      stop("time.point should be positive when outcome.type is COMPETING-RISK or SURVIVAL.")
-    }
-  } else if (outcome.type == "BINOMIAL") {
-    time.point.corrected <<- Inf
-  } else {
-    time.point.corrected <<- time.point
-  }
-  if (conf.level <= 0 | conf.level >= 1)
-    stop("Confidence level must be between 0 and 1")
-  if (outcome.type == "COMPETINGRISK" & !outer.optim.method %in% c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot","partial")) {
-    stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN', 'multiroot' or 'partial'.")
-  }
-  if (outcome.type == "SURVIVAL" & outer.optim.method == "partial") {
-    stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN' or 'multiroot'.")
-  }
-  if (!inner.optim.method %in% c("optim","BFGS","SANN","multiroot")) {
-    stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'multiroot'.")
-  }
-  if (is.null(report.boot.conf) & (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL")) {
-    report.boot.conf.corrected <<- TRUE
-  } else if (is.null(report.boot.conf)) {
-    report.boot.conf.corrected <<- FALSE
-  } else {
-    report.boot.conf.corrected <<- report.boot.conf
-  }
-}
-
-checkInput2 <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, outer.optim.method, inner.optim.method) {
-  cl <- match.call()
-  if (missing(formula)) stop("A formula argument is required")
-  mf <- match.call(expand.dots = TRUE)[1:3]
-  special <- c("strata", "offset", "cluster")
-  out_terms <- terms(formula, special, data = data)
-  if (!is.null(attr(out_terms, "specials")$strata))
-    stop("strata() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$offset))
-    stop("offset() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$cluster))
-    stop("cluster() cannot appear in formula")
-  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL","POLY-PROPORTIONAL","POLY-PROPORTIONAL")) {
-    mf$formula <- out_terms
-    mf[[1]] <- as.name("model.frame")
-    mf <- eval(mf, parent.frame())
-    Y <- model.extract(mf, "response")
-    if (!inherits(Y, c("Event", "Surv"))) {
-      stop("Surv- or Event-object is expected")
-    } else {
-      t <- Y[, 1]
-      if (any(t<0)) stop("Invalid time variable. Expected non-negative values. ")
-      if (!all(Y[, 2] %in% c(code.event1, code.event2, code.censoring))) stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
-    }
-  }
-  if (!is.numeric(conf.level) || length(conf.level) != 1L || conf.level <= 0 || conf.level >= 1)
-    stop("conf.level must be a single number between 0 and 1")
-  if (is.null(report.boot.conf) & (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL")) {
-    report.boot.conf.corrected <<- TRUE
-  } else if (is.null(report.boot.conf)) {
-    report.boot.conf.corrected <<- FALSE
-  } else {
-    report.boot.conf.corrected <<- report.boot.conf
-  }
-  order_choices <- c("PARALLEL","SEQUENTIAL")
-  match.arg(computation.order.method, choices = order_choices)
-  outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
-  match.arg(outer.optim.method, choices = outer_choices)
-  inner_choices <- c("optim","BFGS","SANN","multiroot")
-  match.arg(inner.optim.method, choices = inner_choices)
-
-  #  if (outcome.type == "COMPETING-RISK" & !outer.optim.method %in% c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot","partial")) {
-  #   stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN', 'multiroot' or 'partial'.")
-  #  }
-  #  if (outcome.type == "SURVIVAL" & outer.optim.method == "partial") {
-  #    stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN' or 'multiroot'.")
-  #  }
-  #  if (!inner.optim.method %in% c("optim","BFGS","SANN","multiroot")) {
-  #    stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'multiroot'.")
-  #  }
 }
 
 checkInput <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, outer.optim.method, inner.optim.method) {
@@ -546,45 +404,50 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   return(list(outcome.type = outcome.type.corrected, effect.measure1 = effect.measure1.corrected, effect.measure2 = effect.measure2.corrected))
 }
 
-checkSpell_ <- function(outcome.type, effect.measure1, effect.measure2) {
-  if (requireNamespace("nleqslv", quietly = TRUE)
-      & requireNamespace("boot", quietly = TRUE)) {
-    suppressWarnings(library(nleqslv))
-    suppressWarnings(library(boot))
-  } else {
-    stop("Required packages 'nleqslv' and/or 'boot' are not installed.")
+`%||%` <- function(x, y) if (is.null(x)) y else x
+extractOptimizationInfo <- function(sol, method) {
+  out <- list(solver = method)
+  if (method %in% c("nleqslv","Broyden","Newton")) {
+    out$code    <- sol$termcd %||% NA_integer_
+    out$message <- sol$message %||% NA_character_
+    out$fn.evals <- sol$feval %||% NA_integer_
+    out$jac.evals <- sol$jeval %||% NA_integer_
+  } else if (method == "multiroot") {
+    out$message <- sol$estim.precis %||% NA_character_
+    out$iter    <- sol$iter %||% NA_integer_
+    out$estim.precis <- sol$estim.precis %||% NA_character_
+  } else if (method %in% c("optim","SANN","BFGS")) {
+    out$code       <- sol$convergence %||% NA_integer_
+    out$message    <- sol$message %||% NA_character_
+    if (!is.null(sol$counts)) {
+      out$fn.evals <- sol$counts["function"] %||% NA_integer_
+      out$gr.evals <- sol$counts["gradient"] %||% NA_integer_
+    }
   }
-  if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {
-    outcome.type.corrected <<- "COMPETING-RISK"
-  } else if (outcome.type %in% c("SURVIVAL", "S", "Survival", "Survival")) {
-    outcome.type.corrected <<- "SURVIVAL"
-  } else if (outcome.type %in% c("POLY-PROPORTIONAL", "PP", "Poly-proportional", "poly-proportional")) {
-    outcome.type.corrected <<- "POLY-PROPORTIONAL"
-  } else if (outcome.type %in% c("PROPORTIONAL", "P", "Proportional", "proportional")) {
-    outcome.type.corrected <<- "PROPORTIONAL"
-  } else if (outcome.type %in% c("BINOMIAL", "B", "Binomial", "binomial")) {
-    outcome.type.corrected <<- "BINOMIAL"
-  } else {
-    stop("Invalid input for outcome.type, Choose 'COMPETING-RISK', 'SURVIVAL', 'BINOMIAL', 'PROPORTIONAL', or 'POLY-PROPORTIONAL'.")
+  return(out)
+}
+
+append_trace <- function(trace_df, iteration, computation.time.second = NA_real_, outer.optim.method, objective.function, relative.difference,
+                         max.absolute.difference, converged.by, outer.optim.info, store_params = FALSE,
+                         coefficient = NULL) {
+  row <- data.frame(
+    iteration = iteration,
+    computation.time.second = computation.time.second,
+    outer.optim.method = outer.optim.method,
+    objective.function = objective.function,
+    relative.difference = relative.difference,
+    max.absolute.difference = max.absolute.difference,
+    converged.by = if (isTRUE(converged.by)) NA_character_ else as.character(converged.by),
+    code = outer.optim.info$code %||% NA_integer_,
+    msg  = outer.optim.info$message %||% NA_character_,
+    fn_evals = outer.optim.info$fn.evals %||% NA_integer_,
+    gr_evals = outer.optim.info$gr.evals %||% NA_integer_,
+    jac_evals = outer.optim.info$jac.evals %||% NA_integer_,
+    stringsAsFactors = FALSE
+  )
+  if (isTRUE(store_params)) {
+    row$coefficient <- list(coefficient)
   }
-  if (effect.measure1 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
-    effect.measure1.corrected <<- "RR"
-  } else if (effect.measure1 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
-    effect.measure1.corrected <<- "OR"
-  } else if (effect.measure1 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
-                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
-    effect.measure1.corrected <<- "SHR"
-  } else {
-    stop("Invalid input for effect.measure1, Choose 'RR', 'OR', or 'SHR'.")
-  }
-  if (effect.measure2 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
-    effect.measure2.corrected <<- "RR"
-  } else if (effect.measure2 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
-    effect.measure2.corrected <<- "OR"
-  } else if (effect.measure2 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
-                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
-    effect.measure2.corrected <<- "SHR"
-  } else {
-    stop("Invalid input for effect.measure2, Choose 'RR', 'OR', or 'SHR'.")
-  }
+  if (is.null(trace_df)) return(row)
+  rbind(trace_df, row)
 }

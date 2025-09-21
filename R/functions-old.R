@@ -34,3 +34,44 @@ calculateIPCW_20250401 <- function(formula, data, code.censoring, strata_name, s
     stop("Inverse probability weights contain NA values")
   return(ip.weight)
 }
+
+checkDependentPackages <- function(computation.order.method = c("SEQUENTIAL", "PARALLEL")) {
+  computation.order.method <- match.arg(computation.order.method)
+
+  # 1) 依存確認（存在だけチェック）
+  required_pkgs <- c("ggsurvfit", "Rcpp", "nleqslv", "boot")
+  parallel_pkgs <- c("future", "future.apply")
+  pkgs <- if (computation.order.method=="PARALLEL") {
+    c(required_pkgs, parallel_pkgs)
+  } else {
+    required_pkgs
+  }
+
+  missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
+  if (length(missing_pkgs) > 0) {
+    stop("Required packages not installed: ", paste(missing_pkgs, collapse = ", "))
+  }
+
+  # 2) 並列プラン（必要なときだけ設定）
+  if (computation.order.method=="PARALLEL") {
+    # すでに multisession でなければ設定
+    current_plan <- future::plan("list")[[1]]  # 現行ストラテジ関数
+    if (!inherits(current_plan, "multisession")) {
+      future::plan(future::multisession)
+    }
+    # RNG 再現性が必要なら（任意）
+    # RNGkind("L'Ecuyer-CMRG")  # 呼び出し側で行うなら削除してOK
+  }
+
+  invisible(TRUE)
+}
+
+checkDependentPackages_old <- function() {
+  if (requireNamespace("ggsurvfit", quietly = TRUE) & requireNamespace("Rcpp", quietly = TRUE)) {
+    suppressWarnings(library(ggsurvfit))
+    suppressWarnings(library(Rcpp))
+  } else {
+    stop("Required packages 'ggsurvfit' and/or 'Rcpp' are not installed.")
+  }
+}
+
