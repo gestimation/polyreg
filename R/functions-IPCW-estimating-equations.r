@@ -51,11 +51,8 @@ estimating_equation_ipcw <- function(
 
   if (optim.method$computation.order.method=="SEQUENTIAL") {
     potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-  } else if (optim.method$computation.order.method=="PARALLEL") {
-#    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,i_parameter,optim.method,prob.bound,initial.CIFs)
-    potential.CIFs <- calculatePotentialCIFs_LM(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   } else {
-    potential.CIFs <- calculatePotentialCIFs_tinyLM(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   }
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
@@ -477,10 +474,10 @@ estimating_equation_proportional <- function(
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
-    if (optim.method$computation.order.method=="OLD") {
+    if (optim.method$computation.order.method=="SEQUENTIAL") {
       potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     } else {
-      potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+      potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     }
     one <- rep(1, nrow(x_l))
     a <- as.vector(x_a)
@@ -611,8 +608,11 @@ estimating_equation_pproportional <- function(
     y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
-    #  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    if (optim.method$computation.order.method=="SEQUENTIAL") {
+      potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    } else {
+      potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    }
     ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
     ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 
@@ -699,32 +699,18 @@ calculateNelsonAalen <- function(t, d) {
   return(na)
 }
 
-## ===== 0) ユーティリティ（必要なら流用） ==========================
-`%||%` <- function(x, y) if (is.null(x)) y else x
 
-clampP <- function(p, bound) {
-  # 確率ベクトル p を [bound, 1-bound] にクランプしつつ、(1-p1-p2) も安全化
-  p <- pmax(bound, pmin(1 - bound, p))
-  p
-}
-clampLogP <- function(lp, bound = 0) {
-  # log確率に軽い下駄（必要なら bound を利用）
-  # 既存の clampLogP があるならそちらを使ってOK
-  lp
-}
 
-## ===== 1) effect.measure の小カーネルを作るファクトリー ===========
-## idx = (i,j) は (1,3) or (2,4) のペアを想定
-make_effect_kernel <- function(measure, idx) {
-  i <- idx[1]; j <- idx[2]
-  if (measure == "RR") {
+chooseEffectMeasureLevenbergMarquardt <- function(effect.measure, index) {
+  i <- index[1]; j <- index[2]
+  if (effect.measure == "RR") {
     res <- function(p, clogp, beta) {
       beta - clogp[j] + clogp[i]
     }
     jac <- function(p, clogp, beta) {
       g <- numeric(4); g[i] <-  1; g[j] <- -1; g
     }
-  } else if (measure == "OR") {
+  } else if (effect.measure == "OR") {
     res <- function(p, clogp, beta) {
       beta - clogp[j] + clogp[i] + log1p(-p[j]) - log1p(-p[i])
     }
@@ -734,68 +720,53 @@ make_effect_kernel <- function(measure, idx) {
       g[j] <- -1 + (-p[j]/(1 - p[j]))
       g
     }
-  } else if (measure == "SHR" || identical(measure, "")) {
+  } else if (effect.measure == "SHR" || identical(effect.measure, "")) {
     res <- function(p, clogp, beta) {
       exp(beta) - (log1p(-p[j]) / log1p(-p[i]))
     }
     jac <- function(p, clogp, beta) {
-      # ∂/∂log p ： d p / d log p = p
       g <- numeric(4)
       Bi <- log1p(-p[i])  # < 0
       Bj <- log1p(-p[j])
-      # d/d log p_i of [-log(1-p_j)/log(1-p_i)] =  (Bj * (-p_i/(1-p_i))) / Bi^2
       g[i] <-  ( Bj * (-p[i]/(1 - p[i])) ) / (Bi^2)
-      # d/d log p_j of [-log(1-p_j)/log(1-p_i)] =  p_j / ((1-p_j) * Bi)
       g[j] <-   p[j] / ((1 - p[j]) * Bi)
       g
     }
   } else {
     stop("Invalid measure: must be 'RR','OR','SHR' (or '' as SHR).")
   }
-  list(res = res, jac = jac, idx = c(i, j))
+  return(list(res = res, jac = jac, index = c(i, j)))
 }
 
-## ===== 2) 残差・ヤコビアン（本体は分岐なし、カーネル差し替え） ====
-residuals_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2,
-                                   estimand, prob.bound, k1, k2) {
+residuals_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2) {
   clogp <- clampLogP(as.numeric(log_p))
   if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
   p <- exp(clogp)
-
   rem12 <- max(1 - p[1] - p[2], prob.bound)
   rem34 <- max(1 - p[3] - p[4], prob.bound)
   lp0102 <- log(rem12) + log(rem34)
-
   r <- numeric(4)
-  # 共通部（ret1, ret3）
   r[1] <- alpha1 - clogp[1] - clogp[3] + lp0102
   r[3] <- alpha2 - clogp[2] - clogp[4] + lp0102
-  # 差分部（ret2, ret4）はカーネルで
-  r[2] <- k1$res(p, clogp, beta1)
-  r[4] <- k2$res(p, clogp, beta2)
-  r
+  r[2] <- cemlm1$res(p, clogp, beta1)
+  r[4] <- cemlm2$res(p, clogp, beta2)
+  return(r)
 }
 
-jacobian_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2,
-                                  estimand, prob.bound, k1, k2) {
+jacobian_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2) {
   clogp <- clampLogP(as.numeric(log_p))
   if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
   p <- exp(clogp)
-
   rem12 <- max(1 - p[1] - p[2], prob.bound)
   rem34 <- max(1 - p[3] - p[4], prob.bound)
-
-  dlp12 <- c(-p[1]/rem12, -p[2]/rem12)  # ∂/∂logp log(1-p1-p2)
+  dlp12 <- c(-p[1]/rem12, -p[2]/rem12)
   dlp34 <- c(-p[3]/rem34, -p[4]/rem34)
-
   J <- matrix(0.0, 4, 4)
-  # 共通部（ret1, ret3 のヤコビアン）
   J[1,] <- c(-1 + dlp12[1], dlp12[2], -1 + dlp34[1], dlp34[2])
   J[3,] <- c(dlp12[1], -1 + dlp12[2], dlp34[1], -1 + dlp34[2])
-  # 差分部（ret2, ret4）
-  J[2,] <- k1$jac(p, clogp, beta1)
-  J[4,] <- k2$jac(p, clogp, beta2)
-  J
+  J[2,] <- cemlm1$jac(p, clogp, beta1)
+  J[4,] <- cemlm2$jac(p, clogp, beta2)
+  return(J)
 }
 
 ## ===== 3) 4×4専用・極小LM（base Rのみ） =============================
@@ -803,7 +774,7 @@ jacobian_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2,
 ## * nls.lm 相当の挙動（ρで λ を更新）
 ## * line search 付き
 ## * base R のみ（chol/backsolve/forwardsolve/crossprod）
-tiny_lm4_robust <- function(start,
+LevenbergMarquardt <- function(start,
                             res_fun, jac_fun,
                             maxit = 100L,
                             ftol  = 1e-10,
@@ -914,28 +885,19 @@ tiny_lm4_robust <- function(start,
   }
 
   if (isTRUE(verbose)) attr(lp, "history") <- hist
-  lp
+  return(lp)
 }
 
-## ===== 4) 観測1件用の小ラッパ ================================
-# NULL 合体演算子（未定義ならこれも定義しておく）
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-# 方法A：明示指定で tiny_lm4_robust を呼ぶ安全版ラッパ
-solve_one_CIFs_tinyLM <- function(start_lp,
+callLevenbergMarquardt <- function(log_CIFs0,
                                   alpha1, beta1, alpha2, beta2,
                                   estimand, prob.bound,
-                                  k1, k2,
-                                  ctrl = list()) {
-  # 残差・ヤコビアン（分岐なし、本体は共通）
-  res_fun <- function(lp) residuals_CIFs_generic(lp, alpha1, beta1, alpha2, beta2,
-                                                 estimand, prob.bound, k1, k2)
-  jac_fun <- function(lp) jacobian_CIFs_generic(lp, alpha1, beta1, alpha2, beta2,
-                                                estimand, prob.bound, k1, k2)
-
-  # 必要なパラメータだけ明示的に拾って渡す（他は無視）
-  lp_hat <- tiny_lm4_robust(
-    start         = start_lp,
+                                  cemlm1, cemlm2,
+                                  ctrl = list())
+  {
+  res_fun <- function(lp) residuals_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
+  jac_fun <- function(lp) jacobian_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
+  out_LevenbergMarquardt <- LevenbergMarquardt(
+    start         = log_CIFs0,
     res_fun       = res_fun,
     jac_fun       = jac_fun,
     maxit         = ctrl$maxit        %||% 100L,
@@ -951,25 +913,17 @@ solve_one_CIFs_tinyLM <- function(start_lp,
     ls_shrink     = ctrl$ls_shrink    %||% 0.5,
     verbose       = ctrl$verbose      %||% FALSE
   )
-
-  lp_hat
+  return(out_LevenbergMarquardt)
 }
 
-## ===== 5) drop-in 置換: calculatePotentialCIFs_* =====================
-## 旧 calculatePotentialCIFs_old と同じ役割＆返り値
-calculatePotentialCIFs_tinyLM <- function(
+calculatePotentialCIFs <- function(
     alpha_beta_tmp,
     x_a, x_l, offset, epsilon,
     estimand, optim.method, prob.bound,
     initial.CIFs = NULL,
-    lm_ctrl = list(maxit=30L, ftol=1e-10, ptol=1e-10,
-                   lambda0=1e-3, lambda_up=10, lambda_down=0.1)
+    lm_ctrl = list(maxit=30L, ftol=1e-10, ptol=1e-10, lambda0=1e-3, lambda_up=10, lambda_down=0.1)
 ) {
-  # 0) effect.measure を一度だけ固定（以降分岐なし）
-  k1 <- make_effect_kernel(estimand$effect.measure1, c(1,3))
-  k2 <- make_effect_kernel(estimand$effect.measure2 %||% "SHR", c(2,4))
 
-  # 1) パラメータ分割
   i_parameter <- rep(NA_integer_, 7L)
   i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
   alpha_1    <- alpha_beta_tmp[seq_len(i_parameter[1])]
@@ -977,11 +931,9 @@ calculatePotentialCIFs_tinyLM <- function(
   alpha_2    <- alpha_beta_tmp[seq.int(i_parameter[4], i_parameter[5])]
   beta_tmp_2 <- alpha_beta_tmp[seq.int(i_parameter[6], i_parameter[7])]
 
-  # 2) 線形予測子
   alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
   alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
 
-  # 3) 初期確率（安全化）
   n  <- length(epsilon)
   p0 <- c(
     sum(epsilon == estimand$code.event1) / n + prob.bound,
@@ -995,36 +947,38 @@ calculatePotentialCIFs_tinyLM <- function(
   # 4) 全行ユニーク化キャッシュ（baseのみ）
   keys <- apply(x_l, 1, function(r) paste0(r, collapse = "\r"))
   uniq <- match(keys, unique(keys))
-  cache_lp <- vector("list", length = max(uniq))
+  cache_log_CIFs <- vector("list", length = max(uniq))
 
-  out <- matrix(NA_real_, nrow = nrow(x_l), ncol = 4L)
+  cemlm1 <- chooseEffectMeasureLevenbergMarquardt(estimand$effect.measure1, c(1,3))
+  cemlm2 <- chooseEffectMeasureLevenbergMarquardt(estimand$effect.measure2 %||% "SHR", c(2,4))
+  potential.CIFs <- matrix(NA_real_, nrow = nrow(x_l), ncol = 4L)
 
   for (i in seq_len(nrow(x_l))) {
     k <- uniq[i]
 
-    if (!is.null(cache_lp[[k]])) {
-      lp_hat <- cache_lp[[k]]
+    if (!is.null(cache_log_CIFs[[k]])) {
+      log_CIFs <- cache_log_CIFs[[k]]
     } else {
-      ip <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, 1:4, drop = FALSE]) else exp(log_p0)
-      start_lp <- log(clampP(ip, prob.bound))
+      CIFs0 <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, 1:4, drop = FALSE]) else exp(log_p0)
+      log_CIFs0 <- log(clampP(CIFs0, prob.bound))
 
-      lp_hat <- solve_one_CIFs_tinyLM(
-        start_lp  = start_lp,
+      log_CIFs <- callLevenbergMarquardt(
+        log_CIFs0  = log_CIFs0,
         alpha1    = alpha_tmp_1[i],
         beta1     = beta_tmp_1,
         alpha2    = alpha_tmp_2[i],
         beta2     = beta_tmp_2,
         estimand  = estimand,
         prob.bound = prob.bound,
-        k1 = k1, k2 = k2,
+        cemlm1 = cemlm1,
+        cemlm2 = cemlm2,
         ctrl = lm_ctrl
       )
-      cache_lp[[k]] <- lp_hat
+      cache_log_CIFs[[k]] <- log_CIFs
     }
-
-    out[i, ] <- clampP(exp(lp_hat), prob.bound)
+    potential.CIFs[i, ] <- clampP(exp(log_CIFs), prob.bound)
   }
 
-  colnames(out) <- c("p10", "p20", "p11", "p21")
-  out
+  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
+  return(potential.CIFs)
 }
