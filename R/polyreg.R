@@ -21,10 +21,7 @@
 #' @param boot.bca logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).
 #' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals. Defaults to 200.
 #' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
-#' @param computation.order.method character Specifies the method for computing CIFs (LM = Levenberg-Marquardt using minpack.lm::nls.lm, PARALLEL = parallel computation using future.future_lapply, SEQUENTIAL = sequential computation for each covariate level after sorting observations). Defaults to LM.
-#' @param computation.order.batch.size numeric Batch size for parallel computation. Defaults to NULL.
 #' @param nleqslv.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
-#' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
 #' @param optim.parameter1 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter2 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
@@ -76,10 +73,7 @@ polyreg <- function(
     boot.bca = TRUE,
     boot.parameter1 = 200,
     boot.parameter2 = 46,
-    computation.order.method = "LM",
-    computation.order.batch.size = NULL,
     nleqslv.method = "nleqslv",
-    inner.optim.method = "optim",
     optim.parameter1 = 1e-6,
     optim.parameter2 = 1e-6,
     optim.parameter3 = 100,
@@ -104,7 +98,7 @@ polyreg <- function(
   computation.time0 <- proc.time()
   cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
   outcome.type <- cs$outcome.type
-  ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, nleqslv.method, inner.optim.method)
+  ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, nleqslv.method)
   report.boot.conf <- ci$report.boot.conf
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
@@ -122,8 +116,6 @@ polyreg <- function(
     code.exposure.ref=code.exposure.ref
   )
   optim.method <- list(
-    computation.order.method = computation.order.method,
-    computation.order.batch.size = computation.order.batch.size,
     nleqslv.method = nleqslv.method,
     optim.parameter1 = optim.parameter1,
     optim.parameter2 = optim.parameter2,

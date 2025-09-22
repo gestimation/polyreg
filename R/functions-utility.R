@@ -301,7 +301,7 @@ checkInput_new <- function(outcome.type, conf.level, report.boot.conf, nleqslv.m
   )
 }
 
-checkInput <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, nleqslv.method, inner.optim.method) {
+checkInput <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, nleqslv.method) {
   cl <- match.call()
   if (missing(formula)) stop("A formula argument is required")
   mf <- match.call(expand.dots = TRUE)[1:3]
@@ -335,22 +335,9 @@ checkInput <- function(data, formula, code.event1, code.event2, code.censoring, 
   } else {
     report.boot.conf.corrected <- report.boot.conf
   }
-#  order_choices <- c("PARALLEL","SEQUENTIAL")
-#  computation.order.method <- match.arg(computation.order.method, choices = order_choices)
-  outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
+  outer_choices <- c("nleqslv","Newton","Broyden")
   nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
-  inner_choices <- c("optim","BFGS","SANN","multiroot")
-  inner.optim.method <- match.arg(inner.optim.method, choices = inner_choices)
   return(list(report.boot.conf = report.boot.conf.corrected))
-  #  if (outcome.type == "COMPETING-RISK" & !nleqslv.method %in% c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot","partial")) {
-  #   stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN', 'multiroot' or 'partial'.")
-  #  }
-  #  if (outcome.type == "SURVIVAL" & nleqslv.method == "partial") {
-  #    stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN' or 'multiroot'.")
-  #  }
-  #  if (!inner.optim.method %in% c("optim","BFGS","SANN","multiroot")) {
-  #    stop("Invalid input for 'optimization'. Choose 'optim', 'BFGS', 'SANN' or 'multiroot'.")
-  #  }
 }
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
