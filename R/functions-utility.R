@@ -90,8 +90,9 @@ Event <- function(time, event) {
   ss
 }
 
-read_time.point <- function(formula, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point) {
-  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
+read_time.point <- function(formula, data, outcome.type, code.censoring, time.point) {
+#  read_time.point <- function(formula, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point) {
+    if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
     if (is.null(time.point) || !length(time.point)) stop("time.point is required when outcome.type is COMPETING-RISK or SURVIVAL.")
     tp <- suppressWarnings(max(time.point, na.rm = TRUE))
     if (!is.finite(tp) || tp < 0) stop("time.point must be non-negative and finite when outcome.type is COMPETING-RISK or SURVIVAL.")
@@ -110,60 +111,8 @@ read_time.point <- function(formula, data, outcome.type, exposure, code.censorin
     Y <- model.extract(mf, "response")
     t <- Y[, 1]
     epsilon <- Y[, 2]
-
-    ## ★ ここがポイント：a は mf から作る（data ではなく）
-    a_raw <- mf[[exposure]]
-
-    ## 0/1 に正規化（factor/数値どちらでも対応）
-    if (is.factor(a_raw)) {
-      a_fac <- droplevels(a_raw)
-      if (nlevels(a_fac) != 2L) stop("exposure must be binary; levels: ", paste(levels(a_fac), collapse=", "))
-      levs <- levels(a_fac)
-      # レベルが "0","1" ならそのまま数値化、そうでなければ2番目のレベルを1とする
-      if (all(levs %in% c("0","1"))) {
-        a_num <- as.integer(as.character(a_fac))
-      } else {
-        a_num <- as.integer(a_fac == levs[2L])
-      }
-    } else {
-      a_num <- as.numeric(a_raw)
-    }
-
-    ## 参照カテゴリ code.exposure.ref に合わせて 0/1 に揃える
-    ## （非参照=1 になるように）
-    a <- as.integer(a_num != code.exposure.ref)
-
-    print(length(a))
-    print(length(a_num))
-    print(length(a_raw))
-    print(length(t))
-    ## 安全チェック
-    if (length(a) != length(t)) stop("length mismatch: a vs t")
-    a <- as.vector(a)
-
-    ## 群別の t / epsilon
-    t0 <- t[a == 0L]
-    t1 <- t[a == 1L]
-    epsilon0 <- epsilon[a == 0L]
-    epsilon1 <- epsilon[a == 1L]
-
-    ## 群別の時点ベクトル（data$t0 等は使わない）
-    tp0 <- sort(unique(t0[is.finite(t0) & !is.na(epsilon0) & epsilon0 != code.censoring]))
-    tp1 <- sort(unique(t1[is.finite(t1) & !is.na(epsilon1) & epsilon1 != code.censoring]))
-
-    ## 全体の時点ベクトル
-    tp <- data$t[!is.na(data$epsilon) & data$epsilon != code.censoring]
+    tp <- t[epsilon != code.censoring]
     tp <- sort(unique(tp[is.finite(tp)]))
-    print(tp)
-
-    ## 両群の「最後の時点」より後を削除
-    last0  <- if (length(tp0)) max(tp0) else Inf
-    last1  <- if (length(tp1)) max(tp1) else Inf
-    cutoff <- min(last0, last1)
-    tp <- tp[tp < cutoff]
-
-    print(tp)
-
     return(tp)
   } else {
     return(time.point)

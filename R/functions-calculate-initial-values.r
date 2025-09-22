@@ -1,4 +1,4 @@
-getInitialValues <- function(formula, data, exposure, data.initial.values, estimand, specific.time, outcome.type, prob.bound) {
+getInitialValues <- function(formula, data, outcome.type, exposure, estimand, specific.time, data.initial.values, prob.bound) {
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
   special <- c("strata", "cluster", "offset")
@@ -132,61 +132,6 @@ getInitialValues <- function(formula, data, exposure, data.initial.values, estim
     }
   }
   return(init_vals)
-}
-
-getInitialValuesPP <- function(formula, data, exposure, data.initial.values, estimand, outcome.type, prob.bound, out_normalizeCovariate) {
-  cl <- match.call()
-  mf <- match.call(expand.dots = TRUE)[1:3]
-  special <- c("strata", "cluster", "offset")
-  Terms <- terms(formula, special, data = data)
-  mf$formula <- Terms
-  mf[[1]] <- as.name("model.frame")
-  mf <- eval(mf, parent.frame())
-  Y <- model.extract(mf, "response")
-  if (!inherits(Y, c("Event", "Surv")))
-    stop("Expected a 'Surv' or 'Event'-object")
-  if (ncol(Y) == 2) {
-    t <- Y[, 1]
-    epsilon <- Y[, 2]
-  }
-  if (is.null(estimand$time.point)) {
-    time.point <- with(data, t[epsilon > 0])
-    time.point <- unique(time.point)
-  } else {
-    time.point <- estimand$time.point
-  }
-  n_para_1 <- out_normalizeCovariate$n_covariate+1
-  n_para_2 <- out_normalizeCovariate$n_covariate+2
-  n_para_3 <- out_normalizeCovariate$n_covariate+3
-  n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
-  n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
-  n_para_6 <- length(time.point)*(n_para_5-2) + 2
-  alpha_beta_0 <- rep(NA, n_para_6) # initial parameters for event 1 and 2 over time points
-  i_time <- sum1 <- sum2 <- 0
-  for (specific.time in time.point) {
-    specific.time <- as.numeric(specific.time)
-    out_getInitialValues <- getInitialValues(
-      formula = formula,
-      data = data,
-      exposure = exposure,
-      data.initial.values = data.initial.values,
-      estimand = estimand,
-      specific.time = specific.time,
-      outcome.type = outcome.type,
-      prob.bound = prob.bound
-    )
-    i_time <- i_time + 1
-    i_para <- n_para_1*(i_time-1)+1
-    tmp1 <- out_getInitialValues[1:n_para_1]
-    tmp2 <- out_getInitialValues[n_para_3:n_para_4]
-    alpha_beta_0[i_para:(i_para+n_para_1-1)]                          <- tmp1
-    alpha_beta_0[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]  <- tmp2
-    sum1 <- sum1 + out_getInitialValues[n_para_2]
-    sum2 <- sum2 + out_getInitialValues[n_para_5]
-  }
-  alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
-  alpha_beta_0[n_para_6]    <- sum2/length(time.point)
-  return(alpha_beta_0)
 }
 
 calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estimand, specific.time, prob.bound) {
@@ -331,4 +276,80 @@ calculateInitialValuesSurvival <- function(t, epsilon, a, l = NULL, estimand, sp
 
     return(cbind(alpha_10, alpha_11, beta_1))
   }
+}
+
+getInitialValuesProportional <- function(formula, data, outcome.type, exposure, estimand, data.initial.values, prob.bound, out_normalizeCovariate) {
+  cl <- match.call()
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "cluster", "offset")
+  Terms <- terms(formula, special, data = data)
+  mf$formula <- Terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  if (!inherits(Y, c("Event", "Surv")))
+    stop("Expected a 'Surv' or 'Event'-object")
+  if (ncol(Y) == 2) {
+    t <- Y[, 1]
+    epsilon <- Y[, 2]
+  }
+
+  n_para_1 <- out_normalizeCovariate$n_covariate + 1
+  n_para_2 <- out_normalizeCovariate$n_covariate + 2
+  n_para_3 <- out_normalizeCovariate$n_covariate + 3
+  n_para_4 <- 2*out_normalizeCovariate$n_covariate + 3
+  n_para_5 <- 2*out_normalizeCovariate$n_covariate + 4
+  n_para_6 <- length(estimand$time.point) * (n_para_5 - 2) + 2
+
+  if (outcome.type == "PROPORTIONAL") {
+    alpha_beta_0 <- rep(NA_real_, n_para_6/2)
+  } else {
+    alpha_beta_0 <- rep(NA_real_, n_para_6)
+  }
+
+  sum1 <- 0
+  sum2 <- 0
+  i_time <- 0
+
+  for (specific.time in estimand$time.point) {
+    specific.time <- as.numeric(specific.time)
+    out_getInitialValues <- getInitialValues(
+      formula = formula,
+      data = data,
+      outcome.type = outcome.type,
+      exposure = exposure,
+      estimand = estimand,
+      specific.time = specific.time,
+      data.initial.values = data.initial.values,
+      prob.bound = prob.bound
+    )
+
+    i_time <- i_time + 1
+    i_para <- n_para_1*(i_time - 1) + 1
+
+    tmp1 <- out_getInitialValues[seq.int(1, length.out = n_para_1)]
+    if (outcome.type == "PROPORTIONAL") {
+      idx1 <- seq.int(i_para, length.out = n_para_1)
+      alpha_beta_0[idx1] <- tmp1
+    } else {
+      idx1 <- seq.int(i_para, length.out = n_para_1)
+      alpha_beta_0[idx1] <- tmp1
+    }
+    sum1 <- sum1 + out_getInitialValues[n_para_2]
+
+    if (outcome.type == "POLY-PROPORTIONAL") {
+      tmp2 <- out_getInitialValues[seq.int(n_para_3, n_para_4)]
+      idx2_start <- (n_para_6 %/% 2) + i_para
+      idx2 <- seq.int(idx2_start, length.out = n_para_1)
+      alpha_beta_0[idx2] <- tmp2
+      sum2 <- sum2 + out_getInitialValues[n_para_5]
+    }
+  }
+  if (outcome.type == "PROPORTIONAL") {
+    alpha_beta_0[n_para_6 %/% 2] <- sum1 / length(estimand$time.point)
+  } else {
+    alpha_beta_0[n_para_6 %/% 2] <- sum1 / length(estimand$time.point)
+    alpha_beta_0[n_para_6]       <- sum2 / length(estimand$time.point)
+  }
+  return(alpha_beta_0)
 }

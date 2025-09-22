@@ -28,14 +28,14 @@
 #' @param optim.parameter1 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter2 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
-#' @param optim.parameter4 integer Maximum number of iterations in outer loop. Defaults to 20.
-#' @param optim.parameter5 integer Maximum number of iterations for nleqslv in outer loop. Defaults to 200.
-#' @param optim.parameter6 integer Maximum number of iterations for Levenberg-Marquardt routine. Defaults to 20.
+#' @param optim.parameter4 integer Maximum number of iterations in outer loop. Defaults to 50.
+#' @param optim.parameter5 integer Maximum number of iterations for nleqslv in outer loop. Defaults to 50.
+#' @param optim.parameter6 integer Maximum number of iterations for Levenberg-Marquardt routine. Defaults to 50.
 #' @param optim.parameter7 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-10.
-#' @param optim.parameter8 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-10.
-#' @param optim.parameter9 numeric Lambda in Levenberg-Marquardt routine. Defaults to 1e-3.
-#' @param optim.parameter10 numeric Maximum for lambda in Levenberg-Marquardt routine. Defaults to 10.
-#' @param optim.parameter11 numeric Minimum for lambda in Levenberg-Marquardt routine. Defaults to 0.1.
+#' @param optim.parameter8 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-5.
+#' @param optim.parameter9 numeric Lambda in Levenberg-Marquardt routine. Defaults to 1e-5.
+#' @param optim.parameter10 numeric Maximum for lambda in Levenberg-Marquardt routine. Defaults to 40.
+#' @param optim.parameter11 numeric Minimum for lambda in Levenberg-Marquardt routine. Defaults to 0.025.
 #' @param optim.parameter12 numeric Increment for lambda in Levenberg-Marquardt routine. Defaults to 2.
 #' @param optim.parameter13 numeric Decrement for lambda in Levenberg-Marquardt routine. Defaults to 0.5.
 #' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
@@ -80,18 +80,18 @@ polyreg <- function(
     computation.order.batch.size = NULL,
     nleqslv.method = "nleqslv",
     inner.optim.method = "optim",
-    optim.parameter1 = 1e-5,
-    optim.parameter2 = 1e-5,
+    optim.parameter1 = 1e-6,
+    optim.parameter2 = 1e-6,
     optim.parameter3 = 100,
-    optim.parameter4 = 20,
-    optim.parameter5 = 200,
-    optim.parameter6 = 20,
+    optim.parameter4 = 50,
+    optim.parameter5 = 50,
+    optim.parameter6 = 50,
     optim.parameter7 = 1e-10,
-    optim.parameter8 = 1e-10,
-    optim.parameter9 = 1e-3,
-    optim.parameter10 = 10,
-    optim.parameter11 = 0.1,
-    optim.parameter12 = 20,
+    optim.parameter8 = 1e-6,
+    optim.parameter9 = 1e-6,
+    optim.parameter10 = 40,
+    optim.parameter11 = 0.025,
+    optim.parameter12 = 2,
     optim.parameter13 = 0.5,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
@@ -106,7 +106,11 @@ polyreg <- function(
   outcome.type <- cs$outcome.type
   ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, nleqslv.method, inner.optim.method)
   report.boot.conf <- ci$report.boot.conf
-  tp <- read_time.point(nuisance.model, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point)
+
+  data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
+  out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
+  normalized_data <- out_normalizeCovariate$normalized_data
+  tp <- read_time.point(nuisance.model, normalized_data, outcome.type, code.censoring, time.point)
 
   estimand <- list(
     effect.measure1=cs$effect.measure1,
@@ -136,10 +140,6 @@ polyreg <- function(
     optim.parameter13 = optim.parameter13
   )
 
-  data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
-  out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
-  normalized_data <- out_normalizeCovariate$normalized_data
-
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
   #######################################################################################################
@@ -154,43 +154,14 @@ polyreg <- function(
       outcome.type = outcome.type,
       prob.bound = prob.bound
     )
-  } else if (outcome.type == "PROPORTIONAL") {
-    n_para_1 <- out_normalizeCovariate$n_covariate+1
-    n_para_2 <- out_normalizeCovariate$n_covariate+2
-    n_para_3 <- out_normalizeCovariate$n_covariate+3
-    n_para_4 <- 2*out_normalizeCovariate$n_covariate+3
-    n_para_5 <- 2*out_normalizeCovariate$n_covariate+4
-    n_para_6 <- length(time.point)*(n_para_5-2) + 2
-
-    alpha_beta_0 <- rep(NA, n_para_6/2) # initial parameters for event 1 over time points
-    i_time <- sum1 <- sum2 <- 0
-    for (specific.time in time.point) {
-      specific.time <- as.numeric(specific.time)
-      out_getInitialValues <- getInitialValues(
-        formula = nuisance.model,
-        data = normalized_data,
-        exposure = exposure,
-        data.initial.values = data.initial.values,
-        estimand = estimand,
-        specific.time = specific.time,
-        outcome.type = outcome.type,
-        prob.bound = prob.bound
-      )
-      i_time <- i_time + 1
-      i_para <- n_para_1*(i_time-1) + 1
-      idx    <- if (n_para_1 > 0) seq.int(i_para, length.out = n_para_1) else integer(0)
-      alpha_beta_0[idx] <- out_getInitialValues[seq_len(n_para_1)]
-      sum1 <- sum1 + out_getInitialValues[n_para_2]
-    }
-    alpha_beta_0[n_para_6/2]  <- sum1/length(time.point)
-  } else if (outcome.type == "POLY-PROPORTIONAL") {
-    alpha_beta_0 <- getInitialValuesPP(
+  } else if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
+    alpha_beta_0 <- getInitialValuesProportional(
       formula = nuisance.model,
       data = normalized_data,
-      exposure = exposure,
-      data.initial.values = data.initial.values,
-      estimand = estimand,
       outcome.type = outcome.type,
+      exposure = exposure,
+      estimand = estimand,
+      data.initial.values = data.initial.values,
       prob.bound = prob.bound,
       out_normalizeCovariate = out_normalizeCovariate
     )
@@ -441,9 +412,9 @@ polyreg <- function(
     boot.conf_high<- rep(NA,2)
 
     if (outcome.type=="POLY-PROPORTIONAL") {
-      index_coef    <- c(length(time.point) + 1, 2*length(time.point) + 2)
+      index_coef    <- c(length(estimand$time.point) + 1, 2*length(estimand$time.point) + 2)
     } else if (outcome.type=="PROPORTIONAL") {
-      index_coef    <- c(length(time.point) + 1)
+      index_coef    <- c(length(estimand$time.point) + 1)
     } else if (outcome.type=="COMPETING-RISK") {
       index_coef <- seq_len(2*out_normalizeCovariate$n_covariate+4)
     } else if (outcome.type=="BINOMIAL" | outcome.type=="SURVIVAL") {

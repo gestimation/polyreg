@@ -97,7 +97,7 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expect_equal(tested, expected)
 })
 
-test_that("polyreg produced expected common effects in prostate", {
+test_that("polyreg produced expected common effects at 1:5 in prostate", {
   library(dplyr)
   library(janitor)
   library(boot)
@@ -112,9 +112,31 @@ test_that("polyreg produced expected common effects in prostate", {
   prostate$a <- as.numeric((prostate$rx=="placebo"))
   prostate$t <- prostate$dtime/12
   output <- polyreg(nuisance.model = Event(t,epsilon) ~ +1, exposure = 'a', strata='stage', data = prostate,
-                    effect.measure1='RR', effect.measure2='RR', time.point=1:5, outcome.type='PROPORTIONAL', report.boot.conf=FALSE)
+                    effect.measure1='RR', effect.measure2='RR', time.point=1:5, outcome.type='POLY-PROPORTIONAL', report.boot.conf=FALSE)
   tested <- round(output$coefficient,digit=3)
-  expected <- c(-4.246, -2.710, -1.420, -0.669, -0.109, -0.034)
+  expected <- c(-4.246, -2.710, -1.420, -0.669, -0.109, -0.034, -3.702, -2.144, -0.882, -0.129,  0.506,  0.058)
+  expect_equal(tested, expected)
+})
+
+test_that("polyreg produced expected common effects in prostate", {
+  library(dplyr)
+  library(janitor)
+  library(boot)
+  data(prostate)
+  prostate <- prostate %>% mutate(d=ifelse(status=="alive",0,
+                                           ifelse(status=="dead - prostatic ca",1,
+                                                  ifelse(status=="dead - other ca",1,
+                                                         ifelse(status=="dead - heart or vascular",1,
+                                                                ifelse(status=="dead - cerebrovascular",1,1)
+                                                         )))))
+  prostate$d <- as.numeric(prostate$d)
+  prostate$a <- as.numeric((prostate$rx=="placebo"))
+  prostate$t <- prostate$dtime/12
+  output <- polyreg(nuisance.model = Event(t,d) ~ +1, exposure = 'a', strata='stage', data = prostate,
+                    effect.measure1='RR', outcome.type='PROPORTIONAL', report.boot.conf=FALSE)
+  tested <- round(output$coefficient[1:4], digit=3)
+  #expected <- c(-15.988, -15.550, -7.569, -7.560)
+  expected <- c(-6.835, -6.019, -5.016, -4.902)
   expect_equal(tested, expected)
 })
 
