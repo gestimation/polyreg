@@ -49,11 +49,7 @@ estimating_equation_ipcw <- function(
   i_parameter <- rep(NA, 7)
   i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
-  if (optim.method$computation.order.method=="SEQUENTIAL") {
-    potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-  } else {
-    potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-  }
+  potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
   ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
@@ -469,16 +465,13 @@ estimating_equation_proportional <- function(
   for (specific.time in time.point) {
     i_time <- i_time + 1
     i_para <- i_parameter[1]*(i_time-1)+1
-    alpha_beta_i[1:i_parameter[1]]              <- alpha_beta[i_para:(i_para+i_parameter[1]-1)]
-    alpha_beta_i[i_parameter[2]:i_parameter[3]] <- alpha_beta[i_parameter[8]/2]
+    alpha_beta_i[seq_len(i_parameter[1])]                 <- alpha_beta[seq.int(i_para, i_para+i_parameter[1]-1)]
+    alpha_beta_i[seq.int(i_parameter[2], i_parameter[3])] <- alpha_beta[i_parameter[8]/2]
+
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
-    if (optim.method$computation.order.method=="SEQUENTIAL") {
-      potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    } else {
-      potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    }
+    potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     one <- rep(1, nrow(x_l))
     a <- as.vector(x_a)
     ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
@@ -589,16 +582,13 @@ estimating_equation_pproportional <- function(
   score_alpha2 <- 0
   i_time <- 0
   alpha_beta_i <- rep(NA, i_parameter[7])
-  #alpha_beta_i <- rep(NA, n_para_5)
   for (specific.time in time.point) {
     i_time <- i_time + 1
     i_para <- i_parameter[1]*(i_time-1)+1
-#    i_para <- n_para_1*(i_time-1)+1
-    alpha_beta_i[1:i_parameter[1]]              <- alpha_beta[i_para:(i_para+i_parameter[1]-1)]
-    alpha_beta_i[i_parameter[2]:i_parameter[3]] <- alpha_beta[i_parameter[8]/2]
-    alpha_beta_i[i_parameter[4]:i_parameter[5]] <- alpha_beta[(i_parameter[8]/2+i_para):(i_parameter[8]/2+i_para+i_parameter[1]-1)]
-    alpha_beta_i[i_parameter[6]:i_parameter[7]] <- alpha_beta[i_parameter[8]]
-
+    alpha_beta_i[seq_len(i_parameter[1])]              <- alpha_beta[seq.int(i_para, i_para+i_parameter[1]-1)]
+    alpha_beta_i[seq.int(i_parameter[2], i_parameter[3])] <- alpha_beta[i_parameter[8]/2]
+    alpha_beta_i[seq.int(i_parameter[4], i_parameter[5])] <- alpha_beta[seq.int((i_parameter[8]/2+i_para),(i_parameter[8]/2+i_para+i_parameter[1]-1))]
+    alpha_beta_i[seq.int(i_parameter[6], i_parameter[7])] <- alpha_beta[i_parameter[8]]
     #alpha_beta_i[1:n_para_1]        <- alpha_beta[i_para:(i_para+n_para_1-1)]
     #alpha_beta_i[n_para_2]          <- alpha_beta[n_para_6/2]
     #alpha_beta_i[n_para_3:n_para_4] <- alpha_beta[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]
@@ -608,11 +598,7 @@ estimating_equation_pproportional <- function(
     y_1 <- ifelse(epsilon == 1 & t <= specific.time, 1, 0)
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
-    if (optim.method$computation.order.method=="SEQUENTIAL") {
-      potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    } else {
-      potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    }
+    potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
     ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 
@@ -697,288 +683,4 @@ calculateNelsonAalen <- function(t, d) {
   n_atrisk <- rowSums(atrisk)
   na <- d / n_atrisk
   return(na)
-}
-
-
-
-chooseEffectMeasureLevenbergMarquardt <- function(effect.measure, index) {
-  i <- index[1]; j <- index[2]
-  if (effect.measure == "RR") {
-    res <- function(p, clogp, beta) {
-      beta - clogp[j] + clogp[i]
-    }
-    jac <- function(p, clogp, beta) {
-      g <- numeric(4); g[i] <-  1; g[j] <- -1; g
-    }
-  } else if (effect.measure == "OR") {
-    res <- function(p, clogp, beta) {
-      beta - clogp[j] + clogp[i] + log1p(-p[j]) - log1p(-p[i])
-    }
-    jac <- function(p, clogp, beta) {
-      g <- numeric(4)
-      g[i] <-  1 +  p[i]/(1 - p[i])
-      g[j] <- -1 + (-p[j]/(1 - p[j]))
-      g
-    }
-  } else if (effect.measure == "SHR" || identical(effect.measure, "")) {
-    res <- function(p, clogp, beta) {
-      exp(beta) - (log1p(-p[j]) / log1p(-p[i]))
-    }
-    jac <- function(p, clogp, beta) {
-      g <- numeric(4)
-      Bi <- log1p(-p[i])  # < 0
-      Bj <- log1p(-p[j])
-      g[i] <-  ( Bj * (-p[i]/(1 - p[i])) ) / (Bi^2)
-      g[j] <-   p[j] / ((1 - p[j]) * Bi)
-      g
-    }
-  } else {
-    stop("Invalid measure: must be 'RR','OR','SHR' (or '' as SHR).")
-  }
-  return(list(res = res, jac = jac, index = c(i, j)))
-}
-
-residuals_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2) {
-  clogp <- clampLogP(as.numeric(log_p))
-  if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
-  p <- exp(clogp)
-  rem12 <- max(1 - p[1] - p[2], prob.bound)
-  rem34 <- max(1 - p[3] - p[4], prob.bound)
-  lp0102 <- log(rem12) + log(rem34)
-  r <- numeric(4)
-  r[1] <- alpha1 - clogp[1] - clogp[3] + lp0102
-  r[3] <- alpha2 - clogp[2] - clogp[4] + lp0102
-  r[2] <- cemlm1$res(p, clogp, beta1)
-  r[4] <- cemlm2$res(p, clogp, beta2)
-  return(r)
-}
-
-jacobian_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2) {
-  clogp <- clampLogP(as.numeric(log_p))
-  if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
-  p <- exp(clogp)
-  rem12 <- max(1 - p[1] - p[2], prob.bound)
-  rem34 <- max(1 - p[3] - p[4], prob.bound)
-  dlp12 <- c(-p[1]/rem12, -p[2]/rem12)
-  dlp34 <- c(-p[3]/rem34, -p[4]/rem34)
-  J <- matrix(0.0, 4, 4)
-  J[1,] <- c(-1 + dlp12[1], dlp12[2], -1 + dlp34[1], dlp34[2])
-  J[3,] <- c(dlp12[1], -1 + dlp12[2], dlp34[1], -1 + dlp34[2])
-  J[2,] <- cemlm1$jac(p, clogp, beta1)
-  J[4,] <- cemlm2$jac(p, clogp, beta2)
-  return(J)
-}
-
-## ===== 3) 4×4専用・極小LM（base Rのみ） =============================
-## ── 4×4 専用 Levenberg–Marquardt（堅牢版）──
-## * nls.lm 相当の挙動（ρで λ を更新）
-## * line search 付き
-## * base R のみ（chol/backsolve/forwardsolve/crossprod）
-LevenbergMarquardt <- function(start,
-                            res_fun, jac_fun,
-                            maxit = 100L,
-                            ftol  = 1e-10,
-                            ptol  = 1e-10,
-                            lambda0    = 1e-3,
-                            lambda_min = 1e-12,
-                            lambda_max = 1e12,
-                            eta_inc    = 2.0,
-                            eta_dec    = 0.5,
-                            do_linesearch = TRUE,
-                            ls_c      = 1e-4,
-                            ls_shrink = 0.5,
-                            verbose   = FALSE) {
-  ## 初期化
-  lp   <- as.numeric(start)
-  r    <- res_fun(lp)
-  f2   <- drop(crossprod(r))            # ||r||^2
-  J    <- jac_fun(lp)
-  g    <- drop(crossprod(J, r))         # J^T r
-  lam  <- lambda0
-  prev_f2 <- Inf                        # 直前の目的関数値
-
-  if (isTRUE(verbose)) {
-    hist <- list(it=integer(), f2=double(),
-                 grad_inf=double(), lambda=double(),
-                 step_norm=double(), rho=double())
-  }
-
-  for (k in seq_len(maxit)) {
-    ## 停止1: 勾配ノルム
-    grad_inf <- max(abs(g))
-    if (is.finite(grad_inf) && grad_inf < 1e-6) break
-
-    ## (J^T J + λI) δ = -J^T r
-    A <- crossprod(J)
-    diag(A) <- diag(A) + lam
-    R <- try(chol(A), silent = TRUE)
-    if (inherits(R, "try-error")) {
-      lam <- min(lam * 10, lambda_max)
-      next
-    }
-    delta <- -backsolve(R, forwardsolve(t(R), g))
-    step_norm <- max(abs(delta))
-
-    ## 停止2: ステップが小さい
-    if (is.finite(step_norm) &&
-        step_norm <= ptol * (ptol + max(1, max(abs(lp))))) break
-
-    ## 予測減少（LM モデル）
-    pred <- 0.5 * sum(delta * (lam * delta - g))
-    if (!is.finite(pred) || pred <= 0) pred <- .Machine$double.eps
-
-    ## 候補点
-    lp_try <- lp + delta
-    r_try  <- res_fun(lp_try)
-    f2_try <- drop(crossprod(r_try))
-
-    ## ρ = 実際の減少 / 予測減少
-    rho <- (f2 - f2_try) / pred
-    accepted <- FALSE
-
-    if (is.finite(rho) && rho > 0) {
-      ## 受容 → λを減らす
-      lp <- lp_try; r <- r_try; f2 <- f2_try
-      lam <- max(lambda_min, lam * max(eta_dec, 1/(1 + rho)))
-      accepted <- TRUE
-    } else {
-      ## 不受容 → λを増やす
-      lam <- min(lambda_max, lam * (eta_inc * (1 + abs(ifelse(is.finite(rho), rho, 0)))))
-      if (do_linesearch) {
-        ## Armijo 型ラインサーチ
-        t <- 1.0; gTd <- sum(g * delta)
-        while (t > 1e-6) {
-          lp_ls <- lp + t * delta
-          r_ls  <- res_fun(lp_ls)
-          f2_ls <- drop(crossprod(r_ls))
-          if (is.finite(f2_ls) &&
-              f2_ls <= f2 + ls_c * t * gTd) {
-            lp <- lp_ls; r <- r_ls; f2 <- f2_ls
-            accepted <- TRUE
-            break
-          }
-          t <- t * ls_shrink
-        }
-      }
-    }
-
-    ## 次イテレーション用に更新
-    J <- jac_fun(lp)
-    g <- drop(crossprod(J, r))
-
-    ## 停止3: 目的関数の変化が小さい
-    if (k > 1L &&
-        is.finite(prev_f2) && is.finite(f2) &&
-        abs(prev_f2 - f2) <= ftol * (abs(f2) + ftol)) break
-
-    ## ログ
-    if (isTRUE(verbose)) {
-      hist$it        <- c(hist$it, k)
-      hist$f2        <- c(hist$f2, f2)
-      hist$grad_inf  <- c(hist$grad_inf, grad_inf)
-      hist$lambda    <- c(hist$lambda, lam)
-      hist$step_norm <- c(hist$step_norm, step_norm)
-      hist$rho       <- c(hist$rho, if (exists("rho")) rho else NA_real_)
-    }
-
-    prev_f2 <- f2
-  }
-
-  if (isTRUE(verbose)) attr(lp, "history") <- hist
-  return(lp)
-}
-
-callLevenbergMarquardt <- function(log_CIFs0,
-                                  alpha1, beta1, alpha2, beta2,
-                                  estimand, prob.bound,
-                                  cemlm1, cemlm2,
-                                  ctrl = list())
-  {
-  res_fun <- function(lp) residuals_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
-  jac_fun <- function(lp) jacobian_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
-  out_LevenbergMarquardt <- LevenbergMarquardt(
-    start         = log_CIFs0,
-    res_fun       = res_fun,
-    jac_fun       = jac_fun,
-    maxit         = ctrl$maxit        %||% 100L,
-    ftol          = ctrl$ftol         %||% 1e-10,
-    ptol          = ctrl$ptol         %||% 1e-10,
-    lambda0       = ctrl$lambda0      %||% 1e-3,
-    lambda_min    = ctrl$lambda_min   %||% 1e-12,
-    lambda_max    = ctrl$lambda_max   %||% 1e12,
-    eta_inc       = ctrl$eta_inc      %||% 2.0,     # ρ<0 等でλを増やす倍率
-    eta_dec       = ctrl$eta_dec      %||% 0.5,     # ρ>0 でλを減らす倍率
-    do_linesearch = ctrl$do_linesearch%||% TRUE,
-    ls_c          = ctrl$ls_c         %||% 1e-4,
-    ls_shrink     = ctrl$ls_shrink    %||% 0.5,
-    verbose       = ctrl$verbose      %||% FALSE
-  )
-  return(out_LevenbergMarquardt)
-}
-
-calculatePotentialCIFs <- function(
-    alpha_beta_tmp,
-    x_a, x_l, offset, epsilon,
-    estimand, optim.method, prob.bound,
-    initial.CIFs = NULL,
-    lm_ctrl = list(maxit=30L, ftol=1e-10, ptol=1e-10, lambda0=1e-3, lambda_up=10, lambda_down=0.1)
-) {
-
-  i_parameter <- rep(NA_integer_, 7L)
-  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
-  alpha_1    <- alpha_beta_tmp[seq_len(i_parameter[1])]
-  beta_tmp_1 <- alpha_beta_tmp[seq.int(i_parameter[2], i_parameter[3])]
-  alpha_2    <- alpha_beta_tmp[seq.int(i_parameter[4], i_parameter[5])]
-  beta_tmp_2 <- alpha_beta_tmp[seq.int(i_parameter[6], i_parameter[7])]
-
-  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
-  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
-
-  n  <- length(epsilon)
-  p0 <- c(
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound,
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound
-  )
-  p0     <- clampP(p0, prob.bound)
-  log_p0 <- log(p0)
-
-  # 4) 全行ユニーク化キャッシュ（baseのみ）
-  keys <- apply(x_l, 1, function(r) paste0(r, collapse = "\r"))
-  uniq <- match(keys, unique(keys))
-  cache_log_CIFs <- vector("list", length = max(uniq))
-
-  cemlm1 <- chooseEffectMeasureLevenbergMarquardt(estimand$effect.measure1, c(1,3))
-  cemlm2 <- chooseEffectMeasureLevenbergMarquardt(estimand$effect.measure2 %||% "SHR", c(2,4))
-  potential.CIFs <- matrix(NA_real_, nrow = nrow(x_l), ncol = 4L)
-
-  for (i in seq_len(nrow(x_l))) {
-    k <- uniq[i]
-
-    if (!is.null(cache_log_CIFs[[k]])) {
-      log_CIFs <- cache_log_CIFs[[k]]
-    } else {
-      CIFs0 <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, 1:4, drop = FALSE]) else exp(log_p0)
-      log_CIFs0 <- log(clampP(CIFs0, prob.bound))
-
-      log_CIFs <- callLevenbergMarquardt(
-        log_CIFs0  = log_CIFs0,
-        alpha1    = alpha_tmp_1[i],
-        beta1     = beta_tmp_1,
-        alpha2    = alpha_tmp_2[i],
-        beta2     = beta_tmp_2,
-        estimand  = estimand,
-        prob.bound = prob.bound,
-        cemlm1 = cemlm1,
-        cemlm2 = cemlm2,
-        ctrl = lm_ctrl
-      )
-      cache_log_CIFs[[k]] <- log_CIFs
-    }
-    potential.CIFs[i, ] <- clampP(exp(log_CIFs), prob.bound)
-  }
-
-  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
-  return(potential.CIFs)
 }

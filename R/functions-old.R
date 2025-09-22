@@ -219,6 +219,109 @@ calculateIPCW_20250401 <- function(formula, data, code.censoring, strata_name, s
   return(ip.weight)
 }
 
+calculatePotentialCIFs20250918 <- function(
+    alpha_beta_tmp,
+    x_a,
+    x_l,
+    offset,
+    epsilon,
+    estimand,
+    optim.method,
+    prob.bound,
+    initial.CIFs = NULL
+) {
+  i_parameter <- rep(NA_integer_, 7L)
+  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
+  index1 <- seq_len(i_parameter[1])
+  index23 <- seq.int(i_parameter[2], i_parameter[3])
+  index45 <- seq.int(i_parameter[4], i_parameter[5])
+  index67 <- seq.int(i_parameter[6], i_parameter[7])
+  alpha_1 <- alpha_beta_tmp[index1]
+  beta_tmp_1  <- alpha_beta_tmp[index23]
+  alpha_2 <- alpha_beta_tmp[index45]
+  beta_tmp_2  <- alpha_beta_tmp[index67]
+
+  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)                                  # ### INDEX-SAFE
+  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)                                  # ### INDEX-SAFE
+
+  n <- length(epsilon)
+  p0 <- c(
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound,
+    sum(epsilon == estimand$code.event1) / n + prob.bound,
+    sum(epsilon == estimand$code.event2) / n + prob.bound
+  )
+  p0     <- clampP(p0,prob.bound)
+  log_p0 <- log(p0)
+
+  list.CIFs     <- vector("list", nrow(x_l))
+  previous.CIFs <- NULL
+
+  for (i_x in seq_len(nrow(x_l))) {
+    if (i_x > 1) {                                                                                       # ### INDEX-SAFE
+      same_row <- isTRUE(all.equal(
+        as.numeric(x_l[i_x, , drop = FALSE]),                                                            # ### INDEX-SAFE
+        as.numeric(x_l[i_x - 1L, , drop = FALSE])
+      ))
+      if (!is.null(previous.CIFs) && same_row) {
+        list.CIFs[[i_x]] <- previous.CIFs
+        next
+      }
+    }
+
+    if (!is.null(initial.CIFs)) {
+      ip <- as.numeric(initial.CIFs[i_x, , drop = FALSE])
+      if (length(ip) >= 4) ip <- ip[seq_len(4)]                                                          # ### INDEX-SAFE
+      log_p0 <- log(clampP(ip, prob.bound))
+    }
+
+    eq_fn <- function(lp) {
+      estimating_equation_CIFs(
+        log_p        = lp,
+        alpha_tmp_1  = alpha_tmp_1[i_x],
+        beta_tmp_1   = beta_tmp_1,
+        alpha_tmp_2  = alpha_tmp_2[i_x],
+        beta_tmp_2   = beta_tmp_2,
+        estimand     = estimand,
+        optim.method = optim.method,
+        prob.bound   = prob.bound
+      )
+    }
+
+    if (optim.method$inner.optim.method %in% c("optim", "BFGS")) {
+      #      sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS", control = list(maxit = optim.method$optim.parameter7, reltol = optim.method$optim.parameter6))
+      sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS", control = list(maxit = 200, reltol = 1e-8))
+    } else if (optim.method$inner.optim.method == "SANN") {
+      #      sol <- optim(par = log_p0, fn = eq_fn, method = "SANN", control = list(maxit = optim.method$optim.parameter7, reltol = optim.method$optim.parameter6))
+      sol <- optim(par = log_p0, fn = eq_fn, method = "SANN", control = list(maxit = 200, reltol = 1e-8))
+    } else {
+      stop("Unsupported inner.optim.method")
+    }
+
+    probs <- clampP(exp(sol$par), prob.bound)
+    list.CIFs[[i_x]] <- probs
+    previous.CIFs     <- probs
+  }
+
+  potential.CIFs <- do.call(rbind, list.CIFs)
+  return(potential.CIFs)
+}
+
+sortByCovariate <- function(formula, data, optim.method, n_covariate) {
+  if (optim.method$computation.order.method == "SEQUENTIAL" & n_covariate>0) {
+    terms_obj <- terms(formula)
+    covariate_names <- attr(terms_obj, "term.labels")
+    missing_vars <- setdiff(covariate_names, names(data))
+    if (length(missing_vars) > 0) {
+      stop("The following covariates are missing: ", paste(missing_vars, collapse = ", "))
+    }
+    sorted_data <- data[do.call(order, data[covariate_names]), , drop = FALSE]
+    return(sorted_data)
+  } else {
+    return(data)
+  }
+}
+
 checkDependentPackages <- function(computation.order.method = c("SEQUENTIAL", "PARALLEL")) {
   computation.order.method <- match.arg(computation.order.method)
 

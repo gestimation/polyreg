@@ -97,6 +97,26 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expect_equal(tested, expected)
 })
 
+test_that("polyreg produced expected common effects in prostate", {
+  library(dplyr)
+  library(janitor)
+  library(boot)
+  data(prostate)
+  prostate <- prostate %>% mutate(epsilon=ifelse(status=="alive",0,
+                                                 ifelse(status=="dead - prostatic ca",1,
+                                                        ifelse(status=="dead - other ca",1,
+                                                               ifelse(status=="dead - heart or vascular",2,
+                                                                      ifelse(status=="dead - cerebrovascular",2,2)
+                                                               )))))
+  prostate$epsilon <- as.numeric(prostate$epsilon)
+  prostate$a <- as.numeric((prostate$rx=="placebo"))
+  prostate$t <- prostate$dtime/12
+  output <- polyreg(nuisance.model = Event(t,epsilon) ~ +1, exposure = 'a', strata='stage', data = prostate,
+                    effect.measure1='RR', effect.measure2='RR', time.point=1:5, outcome.type='PROPORTIONAL', report.boot.conf=FALSE)
+  tested <- round(output$coefficient,digit=3)
+  expected <- c(-4.246, -2.710, -1.420, -0.669, -0.109, -0.034)
+  expect_equal(tested, expected)
+})
 
 #test_that("polyreg produced expected coefficients and variance covariance matrix from bmt dataset", {
 #  library(mets)

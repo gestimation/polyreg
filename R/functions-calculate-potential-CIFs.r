@@ -1,88 +1,250 @@
-calculatePotentialCIFs_old <- function(
-    alpha_beta_tmp,
-    x_a,
-    x_l,
-    offset,
-    epsilon,
-    estimand,
-    optim.method,
-    prob.bound,
-    initial.CIFs = NULL
-) {
+
+chooseEffectMeasureLevenbergMarquardt <- function(effect.measure, index) {
+  i <- index[1]; j <- index[2]
+  if (effect.measure == "RR") {
+    res <- function(p, clogp, beta) {
+      beta - clogp[j] + clogp[i]
+    }
+    jac <- function(p, clogp, beta) {
+      g <- numeric(4); g[i] <-  1; g[j] <- -1; g
+    }
+  } else if (effect.measure == "OR") {
+    res <- function(p, clogp, beta) {
+      beta - clogp[j] + clogp[i] + log1p(-p[j]) - log1p(-p[i])
+    }
+    jac <- function(p, clogp, beta) {
+      g <- numeric(4)
+      g[i] <-  1 +  p[i]/(1 - p[i])
+      g[j] <- -1 + (-p[j]/(1 - p[j]))
+      g
+    }
+  } else if (effect.measure == "SHR" || identical(effect.measure, "")) {
+    res <- function(p, clogp, beta) {
+      exp(beta) - (log1p(-p[j]) / log1p(-p[i]))
+    }
+    jac <- function(p, clogp, beta) {
+      g <- numeric(4)
+      Bi <- log1p(-p[i])  # < 0
+      Bj <- log1p(-p[j])
+      g[i] <-  ( Bj * (-p[i]/(1 - p[i])) ) / (Bi^2)
+      g[j] <-   p[j] / ((1 - p[j]) * Bi)
+      g
+    }
+  } else {
+    stop("Invalid measure: must be 'RR','OR','SHR' (or '' as SHR).")
+  }
+  return(list(res = res, jac = jac, index = c(i, j)))
+}
+
+residuals_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2) {
+  clogp <- clampLogP(as.numeric(log_p))
+  if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
+  p <- exp(clogp)
+  rem12 <- max(1 - p[1] - p[2], prob.bound)
+  rem34 <- max(1 - p[3] - p[4], prob.bound)
+  lp0102 <- log(rem12) + log(rem34)
+  r <- numeric(4)
+  r[1] <- alpha1 - clogp[1] - clogp[3] + lp0102
+  r[3] <- alpha2 - clogp[2] - clogp[4] + lp0102
+  r[2] <- cemlm1$res(p, clogp, beta1)
+  r[4] <- cemlm2$res(p, clogp, beta2)
+  return(r)
+}
+
+jacobian_CIFs_generic <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2) {
+  clogp <- clampLogP(as.numeric(log_p))
+  if (length(clogp) < 4L) clogp <- rep(clogp, 4L)
+  p <- exp(clogp)
+  rem12 <- max(1 - p[1] - p[2], prob.bound)
+  rem34 <- max(1 - p[3] - p[4], prob.bound)
+  dlp12 <- c(-p[1]/rem12, -p[2]/rem12)
+  dlp34 <- c(-p[3]/rem34, -p[4]/rem34)
+  J <- matrix(0.0, 4, 4)
+  J[1,] <- c(-1 + dlp12[1], dlp12[2], -1 + dlp34[1], dlp34[2])
+  J[3,] <- c(dlp12[1], -1 + dlp12[2], dlp34[1], -1 + dlp34[2])
+  J[2,] <- cemlm1$jac(p, clogp, beta1)
+  J[4,] <- cemlm2$jac(p, clogp, beta2)
+  return(J)
+}
+
+LevenbergMarquardt <- function(start,
+                               res_fun, jac_fun,
+                               maxit = 30,
+                               ftol  = 1e-10,
+                               ptol  = 1e-10,
+                               lambda0    = 1e-3,
+                               lambda_max = 10,
+                               lambda_min = 0.1,
+                               lambda_increment    = 2.0,
+                               lambda_decrement    = 0.5,
+                               do_linesearch = TRUE,
+                               ls_c      = 1e-4,
+                               ls_shrink = 0.5,
+                               verbose   = FALSE) {
+  lp   <- as.numeric(start)
+  r    <- res_fun(lp)
+  f2   <- drop(crossprod(r))
+  J    <- jac_fun(lp)
+  g    <- drop(crossprod(J, r))
+  lam  <- lambda0
+  prev_f2 <- Inf
+
+  if (isTRUE(verbose)) {
+    hist <- list(it=integer(), f2=double(),
+                 grad_inf=double(), lambda=double(),
+                 step_norm=double(), rho=double())
+  }
+
+  for (k in seq_len(maxit)) {
+    grad_inf <- max(abs(g))
+    if (is.finite(grad_inf) && grad_inf < 1e-6) break
+    A <- crossprod(J)
+    diag(A) <- diag(A) + lam
+    R <- try(chol(A), silent = TRUE)
+    if (inherits(R, "try-error")) {
+      lam <- min(lam * 10, lambda_max)
+      next
+    }
+    delta <- -backsolve(R, forwardsolve(t(R), g))
+    step_norm <- max(abs(delta))
+
+    if (is.finite(step_norm) &&
+        step_norm <= ptol * (ptol + max(1, max(abs(lp))))) break
+
+    pred <- 0.5 * sum(delta * (lam * delta - g))
+    if (!is.finite(pred) || pred <= 0) pred <- .Machine$double.eps
+
+    lp_try <- lp + delta
+    r_try  <- res_fun(lp_try)
+    f2_try <- drop(crossprod(r_try))
+
+    rho <- (f2 - f2_try) / pred
+    accepted <- FALSE
+
+    if (is.finite(rho) && rho > 0) {
+      lp <- lp_try; r <- r_try; f2 <- f2_try
+      lam <- max(lambda_min, lam * max(lambda_decrement, 1/(1 + rho)))
+      accepted <- TRUE
+    } else {
+      lam <- min(lambda_max, lam * (lambda_increment * (1 + abs(ifelse(is.finite(rho), rho, 0)))))
+      if (do_linesearch) {
+        t <- 1.0; gTd <- sum(g * delta)
+        while (t > 1e-6) {
+          lp_ls <- lp + t * delta
+          r_ls  <- res_fun(lp_ls)
+          f2_ls <- drop(crossprod(r_ls))
+          if (is.finite(f2_ls) &&
+              f2_ls <= f2 + ls_c * t * gTd) {
+            lp <- lp_ls; r <- r_ls; f2 <- f2_ls
+            accepted <- TRUE
+            break
+          }
+          t <- t * ls_shrink
+        }
+      }
+    }
+
+    J <- jac_fun(lp)
+    g <- drop(crossprod(J, r))
+
+    if (k > 1L &&
+        is.finite(prev_f2) && is.finite(f2) &&
+        abs(prev_f2 - f2) <= ftol * (abs(f2) + ftol)) break
+
+    if (isTRUE(verbose)) { # ログの記録
+      hist$it        <- c(hist$it, k)
+      hist$f2        <- c(hist$f2, f2)
+      hist$grad_inf  <- c(hist$grad_inf, grad_inf)
+      hist$lambda    <- c(hist$lambda, lam)
+      hist$step_norm <- c(hist$step_norm, step_norm)
+      hist$rho       <- c(hist$rho, if (exists("rho")) rho else NA_real_)
+    }
+    prev_f2 <- f2
+  }
+  if (isTRUE(verbose)) attr(lp, "history") <- hist
+  return(lp)
+}
+
+callLevenbergMarquardt <- function(log_CIFs0, alpha1, beta1, alpha2, beta2, optim.method, estimand, prob.bound, cemlm1, cemlm2)
+{
+  res_fun <- function(lp) residuals_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
+  jac_fun <- function(lp) jacobian_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
+  out_LevenbergMarquardt <- LevenbergMarquardt(
+    start         = log_CIFs0,
+    res_fun       = res_fun,
+    jac_fun       = jac_fun,
+    maxit         = optim.method$optim.parameter6   %||% 30,
+    ftol          = optim.method$optim.parameter7   %||% 1e-10,
+    ptol          = optim.method$optim.parameter8   %||% 1e-10,
+    lambda0       = optim.method$optim.parameter9   %||% 1e-3,
+    lambda_max    = optim.method$optim.parameter10  %||% 10,
+    lambda_min    = optim.method$optim.parameter11  %||% 0.1,
+    lambda_increment  = optim.method$optim.parameter12  %||% 2.0,
+    lambda_decrement  = optim.method$optim.parameter13  %||% 0.5,
+    do_linesearch = TRUE,
+    ls_c          = 1e-4,
+    ls_shrink     = 0.5,
+    verbose       = FALSE
+  )
+  return(out_LevenbergMarquardt)
+}
+
+calculatePotentialCIFs <- function(alpha_beta_tmp, x_a, x_l, offset, epsilon, estimand, optim.method, prob.bound, initial.CIFs = NULL) {
+
   i_parameter <- rep(NA_integer_, 7L)
   i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
-  index1 <- seq_len(i_parameter[1])
-  index23 <- seq.int(i_parameter[2], i_parameter[3])
-  index45 <- seq.int(i_parameter[4], i_parameter[5])
-  index67 <- seq.int(i_parameter[6], i_parameter[7])
-  alpha_1 <- alpha_beta_tmp[index1]
-  beta_tmp_1  <- alpha_beta_tmp[index23]
-  alpha_2 <- alpha_beta_tmp[index45]
-  beta_tmp_2  <- alpha_beta_tmp[index67]
+  alpha_1    <- alpha_beta_tmp[seq_len(i_parameter[1])]
+  beta_tmp_1 <- alpha_beta_tmp[seq.int(i_parameter[2], i_parameter[3])]
+  alpha_2    <- alpha_beta_tmp[seq.int(i_parameter[4], i_parameter[5])]
+  beta_tmp_2 <- alpha_beta_tmp[seq.int(i_parameter[6], i_parameter[7])]
 
-  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)                                  # ### INDEX-SAFE
-  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)                                  # ### INDEX-SAFE
+  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
+  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
 
-  n <- length(epsilon)
+  n  <- length(epsilon)
   p0 <- c(
     sum(epsilon == estimand$code.event1) / n + prob.bound,
     sum(epsilon == estimand$code.event2) / n + prob.bound,
     sum(epsilon == estimand$code.event1) / n + prob.bound,
     sum(epsilon == estimand$code.event2) / n + prob.bound
   )
-  p0     <- clampP(p0,prob.bound)
+  p0     <- clampP(p0, prob.bound)
   log_p0 <- log(p0)
 
-  list.CIFs     <- vector("list", nrow(x_l))
-  previous.CIFs <- NULL
+  keys <- apply(x_l, 1, function(r) paste0(r, collapse = "\r"))
+  uniq <- match(keys, unique(keys))
+  cache_log_CIFs <- vector("list", length = max(uniq))
 
-  for (i_x in seq_len(nrow(x_l))) {
-    if (i_x > 1) {                                                                                       # ### INDEX-SAFE
-      same_row <- isTRUE(all.equal(
-        as.numeric(x_l[i_x, , drop = FALSE]),                                                            # ### INDEX-SAFE
-        as.numeric(x_l[i_x - 1L, , drop = FALSE])
-      ))
-      if (!is.null(previous.CIFs) && same_row) {
-        list.CIFs[[i_x]] <- previous.CIFs
-        next
-      }
-    }
+  cemlm1 <- chooseEffectMeasureLevenbergMarquardt(estimand$effect.measure1, c(1,3))
+  cemlm2 <- chooseEffectMeasureLevenbergMarquardt(estimand$effect.measure2 %||% "SHR", c(2,4))
+  potential.CIFs <- matrix(NA_real_, nrow = nrow(x_l), ncol = 4L)
 
-    if (!is.null(initial.CIFs)) {
-      ip <- as.numeric(initial.CIFs[i_x, , drop = FALSE])
-      if (length(ip) >= 4) ip <- ip[seq_len(4)]                                                          # ### INDEX-SAFE
-      log_p0 <- log(clampP(ip, prob.bound))
-    }
+  for (i in seq_len(nrow(x_l))) {
+    k <- uniq[i]
 
-    eq_fn <- function(lp) {
-      estimating_equation_CIFs(
-        log_p        = lp,
-        alpha_tmp_1  = alpha_tmp_1[i_x],
-        beta_tmp_1   = beta_tmp_1,
-        alpha_tmp_2  = alpha_tmp_2[i_x],
-        beta_tmp_2   = beta_tmp_2,
-        estimand     = estimand,
-        optim.method = optim.method,
-        prob.bound   = prob.bound
-      )
-    }
-
-    if (optim.method$inner.optim.method %in% c("optim", "BFGS")) {
-#      sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS", control = list(maxit = optim.method$optim.parameter7, reltol = optim.method$optim.parameter6))
-      sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS", control = list(maxit = 200, reltol = 1e-8))
-    } else if (optim.method$inner.optim.method == "SANN") {
-      #      sol <- optim(par = log_p0, fn = eq_fn, method = "SANN", control = list(maxit = optim.method$optim.parameter7, reltol = optim.method$optim.parameter6))
-      sol <- optim(par = log_p0, fn = eq_fn, method = "SANN", control = list(maxit = 200, reltol = 1e-8))
+    if (!is.null(cache_log_CIFs[[k]])) {
+      log_CIFs <- cache_log_CIFs[[k]]
     } else {
-      stop("Unsupported inner.optim.method")
+      CIFs0 <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, 1:4, drop = FALSE]) else exp(log_p0)
+      log_CIFs0 <- log(clampP(CIFs0, prob.bound))
+
+      log_CIFs <- callLevenbergMarquardt(
+        log_CIFs0  = log_CIFs0,
+        alpha1    = alpha_tmp_1[i],
+        beta1     = beta_tmp_1,
+        alpha2    = alpha_tmp_2[i],
+        beta2     = beta_tmp_2,
+        estimand  = estimand,
+        optim.method = optim.method,
+        prob.bound = prob.bound,
+        cemlm1 = cemlm1,
+        cemlm2 = cemlm2
+      )
+      cache_log_CIFs[[k]] <- log_CIFs
     }
-
-    probs <- clampP(exp(sol$par), prob.bound)
-    list.CIFs[[i_x]] <- probs
-    previous.CIFs     <- probs
+    potential.CIFs[i, ] <- clampP(exp(log_CIFs), prob.bound)
   }
-
-  potential.CIFs <- do.call(rbind, list.CIFs)
+  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
   return(potential.CIFs)
 }
 
@@ -289,87 +451,3 @@ jacobian_CIFs <- function(
 
   J
 }
-calculatePotentialCIFs_LM <- function(
-    alpha_beta_tmp, x_a, x_l, offset, epsilon, estimand, optim.method, prob.bound, initial.CIFs = NULL
-) {
-  stopifnot(requireNamespace("minpack.lm", quietly = TRUE))
-
-  i_parameter <- rep(NA_integer_, 7L)
-  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
-  alpha_1   <- alpha_beta_tmp[seq_len(i_parameter[1])]
-  beta_tmp_1 <- alpha_beta_tmp[seq.int(i_parameter[2], i_parameter[3])]
-  alpha_2   <- alpha_beta_tmp[seq.int(i_parameter[4], i_parameter[5])]
-  beta_tmp_2 <- alpha_beta_tmp[seq.int(i_parameter[6], i_parameter[7])]
-
-  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
-  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
-
-  n <- length(epsilon)
-  p0 <- c(
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound,
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound
-  )
-  p0     <- clampP(p0, prob.bound)
-  log_p0 <- log(p0)
-
-  # 重複行スキップ（同じ x_l 行の連続重複をキャッシュ）
-  out_mat <- matrix(NA_real_, nrow = nrow(x_l), ncol = 4L)
-  previous_key <- NULL
-  previous_sol <- NULL
-
-  ctrl <- minpack.lm::nls.lm.control(
-    maxiter = optim.method$optim.parameter7 %||% 100L,
-    ftol    = optim.method$optim.parameter6 %||% 1e-10,
-    ptol    = 1e-10
-  )
-
-  for (i_x in seq_len(nrow(x_l))) {
-    key <- paste0(x_l[i_x, ], collapse = "\r")
-
-    if (i_x > 1L && !is.null(previous_sol) && isTRUE(key == previous_key)) {
-      out_mat[i_x, ] <- previous_sol
-      next
-    }
-
-    ip <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i_x, 1:4, drop = FALSE]) else exp(log_p0)
-    start <- log(clampP(ip, prob.bound))
-
-    # 観測 i の残差とJac
-    res_fun <- function(lp) residuals_CIFs(
-      log_p       = lp,
-      alpha_tmp_1 = alpha_tmp_1[i_x],
-      beta_tmp_1  = beta_tmp_1,
-      alpha_tmp_2 = alpha_tmp_2[i_x],
-      beta_tmp_2  = beta_tmp_2,
-      estimand    = estimand,
-      prob.bound  = prob.bound
-    )
-    jac_fun <- function(lp) jacobian_CIFs(
-      log_p       = lp,
-      alpha_tmp_1 = alpha_tmp_1[i_x],
-      beta_tmp_1  = beta_tmp_1,
-      alpha_tmp_2 = alpha_tmp_2[i_x],
-      beta_tmp_2  = beta_tmp_2,
-      estimand    = estimand,
-      prob.bound  = prob.bound
-    )
-
-    fit <- minpack.lm::nls.lm(
-      par = start,
-      fn  = res_fun,
-      jac = jac_fun,
-      control = ctrl
-    )
-
-    sol <- clampP(exp(fit$par), prob.bound)
-    out_mat[i_x, ] <- sol
-    previous_sol <- sol
-    previous_key <- key
-  }
-
-  colnames(out_mat) <- c("p10", "p20", "p11", "p21")
-  out_mat
-}
-

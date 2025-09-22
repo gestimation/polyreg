@@ -23,18 +23,21 @@
 #' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
 #' @param computation.order.method character Specifies the method for computing CIFs (LM = Levenberg-Marquardt using minpack.lm::nls.lm, PARALLEL = parallel computation using future.future_lapply, SEQUENTIAL = sequential computation for each covariate level after sorting observations). Defaults to LM.
 #' @param computation.order.batch.size numeric Batch size for parallel computation. Defaults to NULL.
-#' @param outer.optim.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
+#' @param nleqslv.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
 #' @param inner.optim.method character Specifies the method of optimization (optim, BFGS, SANN).
-#' @param optim.parameter1 numeric A threshold for determining convergence in outer loop. Defaults to 1e-4.
+#' @param optim.parameter1 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter2 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
 #' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
-#' @param optim.parameter4 numeric A threshold for determining convergence in optimization in outer loop. Defaults to 1e-3.
-#' @param optim.parameter5 integer Maximum number of iterations for nleqslv or optim in outer loop. Defaults to 200.
-#' @param optim.parameter6 numeric A threshold for determining convergence in optimization in inner loop. Defaults to 1e-8.
-#' @param optim.parameter7 integer Maximum number of iterations for optim in inner loop. Defaults to 200.
-#' @param optim.parameter8 integer SD for random jitter in inner loop. Defaults to 2.5.
-#' @param optim.parameter9 integer Maximum number of retry in inner loop. Defaults to 2.
-#' @param optim.parameter10 integer Maximum number of iterations. Defaults to 20.
+#' @param optim.parameter4 integer Maximum number of iterations in outer loop. Defaults to 20.
+#' @param optim.parameter5 integer Maximum number of iterations for nleqslv in outer loop. Defaults to 200.
+#' @param optim.parameter6 integer Maximum number of iterations for Levenberg-Marquardt routine. Defaults to 20.
+#' @param optim.parameter7 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-10.
+#' @param optim.parameter8 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-10.
+#' @param optim.parameter9 numeric Lambda in Levenberg-Marquardt routine. Defaults to 1e-3.
+#' @param optim.parameter10 numeric Maximum for lambda in Levenberg-Marquardt routine. Defaults to 10.
+#' @param optim.parameter11 numeric Minimum for lambda in Levenberg-Marquardt routine. Defaults to 0.1.
+#' @param optim.parameter12 numeric Increment for lambda in Levenberg-Marquardt routine. Defaults to 2.
+#' @param optim.parameter13 numeric Decrement for lambda in Levenberg-Marquardt routine. Defaults to 0.5.
 #' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
 #' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
 #' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
@@ -75,18 +78,21 @@ polyreg <- function(
     boot.parameter2 = 46,
     computation.order.method = "LM",
     computation.order.batch.size = NULL,
-    outer.optim.method = "nleqslv",
+    nleqslv.method = "nleqslv",
     inner.optim.method = "optim",
     optim.parameter1 = 1e-5,
     optim.parameter2 = 1e-5,
     optim.parameter3 = 100,
-    optim.parameter4 = 1e-5,
+    optim.parameter4 = 20,
     optim.parameter5 = 200,
-    optim.parameter6 = 1e-8,
-    optim.parameter7 = 200,
-    optim.parameter8 = 2.5,
-    optim.parameter9 = 2,
-    optim.parameter10 = 20,
+    optim.parameter6 = 20,
+    optim.parameter7 = 1e-10,
+    optim.parameter8 = 1e-10,
+    optim.parameter9 = 1e-3,
+    optim.parameter10 = 10,
+    optim.parameter11 = 0.1,
+    optim.parameter12 = 20,
+    optim.parameter13 = 0.5,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
     prob.bound = 1e-5
@@ -98,7 +104,7 @@ polyreg <- function(
   computation.time0 <- proc.time()
   cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
   outcome.type <- cs$outcome.type
-  ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, outer.optim.method, inner.optim.method)
+  ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, nleqslv.method, inner.optim.method)
   report.boot.conf <- ci$report.boot.conf
   tp <- read_time.point(nuisance.model, data, outcome.type, code.censoring, time.point)
 
@@ -114,8 +120,7 @@ polyreg <- function(
   optim.method <- list(
     computation.order.method = computation.order.method,
     computation.order.batch.size = computation.order.batch.size,
-    outer.optim.method = outer.optim.method,
-    inner.optim.method = inner.optim.method,
+    nleqslv.method = nleqslv.method,
     optim.parameter1 = optim.parameter1,
     optim.parameter2 = optim.parameter2,
     optim.parameter3 = optim.parameter3,
@@ -125,13 +130,15 @@ polyreg <- function(
     optim.parameter7 = optim.parameter7,
     optim.parameter8 = optim.parameter8,
     optim.parameter9 = optim.parameter9,
-    optim.parameter10 = optim.parameter10
+    optim.parameter10 = optim.parameter10,
+    optim.parameter11 = optim.parameter11,
+    optim.parameter12 = optim.parameter12,
+    optim.parameter13 = optim.parameter13
   )
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
-  sorted_data <- sortByCovariate(nuisance.model, normalized_data, optim.method, out_normalizeCovariate$n_covariate)
 
   #######################################################################################################
   # 2. Pre-processing and Calculating initial values alpha_beta_0 (function: calculateInitialValues)
@@ -139,7 +146,7 @@ polyreg <- function(
   if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
     alpha_beta_0 <- getInitialValues(
       formula = nuisance.model,
-      data = sorted_data,
+      data = normalized_data,
       exposure = exposure,
       data.initial.values = data.initial.values,
       estimand = estimand,
@@ -161,7 +168,7 @@ polyreg <- function(
       specific.time <- as.numeric(specific.time)
       out_getInitialValues <- getInitialValues(
         formula = nuisance.model,
-        data = sorted_data,
+        data = normalized_data,
         exposure = exposure,
         data.initial.values = data.initial.values,
         estimand = estimand,
@@ -179,7 +186,7 @@ polyreg <- function(
   } else if (outcome.type == "POLY-PROPORTIONAL") {
     alpha_beta_0 <- getInitialValuesPP(
       formula = nuisance.model,
-      data = sorted_data,
+      data = normalized_data,
       exposure = exposure,
       data.initial.values = data.initial.values,
       estimand = estimand,
@@ -193,24 +200,16 @@ polyreg <- function(
   # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
   #######################################################################################################
   if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL") {
-    ip.weight <- calculateIPCW(nuisance.model, sorted_data, code.censoring, strata, estimand$time.point)
+    ip.weight <- calculateIPCW(nuisance.model, normalized_data, code.censoring, strata, estimand$time.point)
   } else if (outcome.type == "BINOMIAL") {
-    ip.weight <- rep(1,nrow(sorted_data))
+    ip.weight <- rep(1,nrow(normalized_data))
   } else if (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL") {
-    ip.weight.matrix <- calculateIPCWMatrix(nuisance.model, sorted_data, code.censoring, strata, estimand, out_normalizeCovariate)
+    ip.weight.matrix <- calculateIPCWMatrix(nuisance.model, normalized_data, code.censoring, strata, estimand, out_normalizeCovariate)
   }
 
   #######################################################################################################
   # 4. Parameter estimation (functions: estimating_equation_ipcw, _survival, _proportional)
   #######################################################################################################
-  if (optim.method$computation.order.method=="PARALLEL") {
-    cur_plan <- tryCatch(future::plan(), error = function(e) NULL)
-    if (!inherits(cur_plan, "multisession")) {
-      future::plan(future::multisession)
-      on.exit(try(future::plan(future::sequential), silent = TRUE), add = TRUE)
-    }
-  }
-
   makeObjectiveFunction <- function() {
     out_ipcw <- list()
     initial.CIFs <- NULL
@@ -220,27 +219,27 @@ polyreg <- function(
     }
       estimating_equation_i <- function(p) call_and_capture(
         estimating_equation_ipcw,
-        formula = nuisance.model, data = sorted_data, exposure = exposure,
+        formula = nuisance.model, data = normalized_data, exposure = exposure,
         ip.weight = ip.weight, alpha_beta = p, estimand = estimand,
         optim.method = optim.method, prob.bound = prob.bound,
         initial.CIFs = initial.CIFs
       )
       estimating_equation_s <- function(p) call_and_capture(
       estimating_equation_survival,
-      formula = nuisance.model, data = sorted_data, exposure = exposure,
+      formula = nuisance.model, data = normalized_data, exposure = exposure,
       ip.weight = ip.weight, alpha_beta = p, estimand = estimand,
       prob.bound = prob.bound, initial.CIFs = initial.CIFs
     )
       estimating_equation_p <- function(p) call_and_capture(
       estimating_equation_proportional,
-      formula = nuisance.model, data = sorted_data, exposure = exposure,
+      formula = nuisance.model, data = normalized_data, exposure = exposure,
       ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
       optim.method = optim.method, prob.bound = prob.bound,
       initial.CIFs = initial.CIFs
     )
       estimating_equation_pp <- function(p) call_and_capture(
       estimating_equation_pproportional,
-      formula = nuisance.model, data = sorted_data, exposure = exposure,
+      formula = nuisance.model, data = normalized_data, exposure = exposure,
       ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
       optim.method = optim.method, prob.bound = prob.bound,
       initial.CIFs = initial.CIFs
@@ -255,16 +254,6 @@ polyreg <- function(
       setInitialCIFs = setInitialCIFs,
       getResults = getResults
     )
-  }
-
-  assessRelativeDifference <- function(new, old) {
-    max(abs(new - old) / pmax(1, abs(old)))
-  }
-
-  is_stalled <- function(x, stall_patience=3, stall_eps=1e-3) {
-   if (length(x) < stall_patience) return(FALSE)
-   recent <- tail(x, stall_patience)
-   (diff(range(recent)) / max(1e-12, mean(recent))) <= stall_eps
   }
 
   assessConvergence <- function(new_params, current_params, current_obj_value, optim.parameter1, optim.parameter2, optim.parameter3) {
@@ -289,6 +278,40 @@ polyreg <- function(
     list(converged = converged, converged.by=converged.by, relative.difference = relative.difference, max.absolute.difference = max.absolute.difference, obj_value = obj_value)
   }
 
+  assessRelativeDifference <- function(new, old) {
+    max(abs(new - old) / pmax(1, abs(old)))
+  }
+
+  is_stalled <- function(x, stall_patience=3, stall_eps=1e-3) {
+    if (length(x) < stall_patience) return(FALSE)
+    recent <- tail(x, stall_patience)
+    (diff(range(recent)) / max(1e-12, mean(recent))) <= stall_eps
+  }
+
+  choose_estimating_equation <- function(outcome.type, obj) {
+    if (outcome.type == "COMPETING-RISK") {
+      obj$estimating_equation_i
+    } else if (outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
+      obj$estimating_equation_s
+    } else if (outcome.type == "PROPORTIONAL") {
+      obj$estimating_equation_p
+    } else if (outcome.type == "POLY-PROPORTIONAL") {
+      obj$estimating_equation_pp
+    } else {
+      stop("Unknown outcome.type: ", outcome.type)
+    }
+  }
+
+  choose_nleqslv_method <- function(nleqslv.method) {
+    if (nleqslv.method %in% c("nleqslv", "Broyden")) {
+      "Broyden"
+    } else if (nleqslv.method == "Newton") {
+      "Newton"
+    } else {
+      stop("Unsupported nleqslv.method without optim(): ", nleqslv.method)
+    }
+  }
+
   get_obj_value <- switch(outcome.type,
                           "COMPETING-RISK"   = function(p) drop(crossprod(obj$estimating_equation_i(p))),
                           "SURVIVAL"         = function(p) drop(crossprod(obj$estimating_equation_s(p))),
@@ -299,187 +322,51 @@ polyreg <- function(
   )
 
   obj <- makeObjectiveFunction()
+  estimating_fun <- choose_estimating_equation(outcome.type, obj)
+  nleqslv_method  <- choose_nleqslv_method(nleqslv.method)
   iteration <- 0L
   max.absolute.difference <- Inf
-  sol <- NULL
+  out_nleqslv <- NULL
   current_params <- alpha_beta_0
   current_obj_value <- numeric(0)
   trace_df  <- NULL
   store_params <- TRUE
 
-  if (outcome.type == "COMPETING-RISK") {
-    while ((iteration < optim.parameter10) & (max.absolute.difference > optim.parameter1)) {
-      iteration <- iteration + 1L
-        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
-        sol <- nleqslv(current_params, obj$estimating_equation_i, method="Broyden",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "Newton"){
-        sol <- nleqslv(current_params, obj$estimating_equation_i, method="Newton",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_i(params))),
-                     method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      } else if (outer.optim.method == "BFGS"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_i(params))),
-                     method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      }
-      current_params <- new_params
-      current_obj_value <- get_obj_value(new_params)
-      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
-      ac <- assessConvergence(new_params, current_params, current_obj_value, optim.parameter1, optim.parameter2, optim.parameter3)
+  while ((iteration < optim.parameter4) & (max.absolute.difference > optim.parameter1)) {
+    iteration <- iteration + 1L
+    prev_params <- current_params
 
-      outer.optim.info <- extractOptimizationInfo(sol, outer.optim.method)
-      computation.time.second <- as.numeric((proc.time() - computation.time0)[3])
-      trace_df <- append_trace(
-        trace_df,
-        iteration = iteration,
-        computation.time.second = computation.time.second,
-        outer.optim.method = outer.optim.method,
-        outer.optim.info = outer.optim.info,
-        objective.function = ac$obj_value,
-        relative.difference = ac$relative.difference,
-        max.absolute.difference = ac$max.absolute.difference,
-        converged.by = if (ac$converged) ac$converged.by else FALSE,
-        coefficient = if (store_params) new_params else NULL
-      )
-      if (ac$converged) break
-    }
-  } else if (outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
-    while ((iteration < optim.parameter10) & (max.absolute.difference > optim.parameter1)) {
-      iteration <- iteration + 1L
+    out_nleqslv <- nleqslv(
+      prev_params,
+      estimating_fun,
+      method  = nleqslv_method,
+      control = list(maxit = optim.parameter5, allowSingular = FALSE)
+    )
+    new_params <- out_nleqslv$x
 
-      if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
-        sol <- nleqslv(current_params, obj$estimating_equation_s, method="Broyden",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "Newton"){
-        sol <- nleqslv(current_params, obj$estimating_equation_s, method="Newton",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_s(params))),
-                     method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      } else if (outer.optim.method == "BFGS"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_s(params))),
-                     method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      }
-      current_params <- new_params
-      current_obj_value <- get_obj_value(new_params)
-      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
-      ac <- assessConvergence(new_params, current_params, current_obj_value, optim.parameter1, optim.parameter2, optim.parameter3)
+    current_obj_value <- get_obj_value(new_params)
+    obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+    ac <- assessConvergence(new_params, prev_params, current_obj_value,optim.parameter1, optim.parameter2, optim.parameter3)
 
-      outer.optim.info <- extractOptimizationInfo(sol, outer.optim.method)
-      computation.time.second <- as.numeric((proc.time() - computation.time0)[3]) * 1000  # ms
-      trace_df <- append_trace(
-        trace_df,
-        iteration = iteration,
-        computation.time.second = computation.time.second,
-        outer.optim.method = outer.optim.method,
-        outer.optim.info = outer.optim.info,
-        objective.function = ac$obj_value,
-        relative.difference = ac$relative.difference,
-        max.absolute.difference = ac$max.absolute.difference,
-        converged.by = if (ac$converged) ac$converged.by else FALSE,
-        coefficient = if (store_params) new_params else NULL
-      )
-      if (ac$converged) break
-    }
-  } else if (outcome.type == "PROPORTIONAL") {
-    while ((iteration < optim.parameter10) & (max.absolute.difference > optim.parameter1)) {
-      iteration <- iteration + 1L
-        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
-        sol <- nleqslv(current_params, obj$estimating_equation_p, method="Broyden",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "Newton"){
-        sol <- nleqslv(current_params, obj$estimating_equation_p, method="Newton",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_p(params))),
-                     method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      } else if (outer.optim.method == "BFGS"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_p(params))),
-                     method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      }
-      current_params <- new_params
-      current_obj_value <- get_obj_value(new_params)
-      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
-      ac <- assessConvergence(new_params, current_params, current_obj_value, optim.parameter1, optim.parameter2, optim.parameter3)
+    nleqslv.info <- extractOptimizationInfo(out_nleqslv, nleqslv.method)
+    computation.time.second <- as.numeric((proc.time() - computation.time0)[3])
 
-      outer.optim.info <- extractOptimizationInfo(sol, outer.optim.method)
-      computation.time.second <- as.numeric((proc.time() - computation.time0)[3]) * 1000  # ms
-      trace_df <- append_trace(
-        trace_df,
-        iteration = iteration,
-        computation.time.second = computation.time.second,
-        outer.optim.method = outer.optim.method,
-        outer.optim.info = outer.optim.info,
-        objective.function = ac$obj_value,
-        relative.difference = ac$relative.difference,
-        max.absolute.difference = ac$max.absolute.difference,
-        converged.by = if (ac$converged) ac$converged.by else FALSE,
-        coefficient = if (store_params) new_params else NULL
-      )
-      if (ac$converged) break
-    }
-  } else if (outcome.type == "POLY-PROPORTIONAL") {
-    while ((iteration < optim.parameter10) & (max.absolute.difference > optim.parameter1)) {
-      iteration <- iteration + 1L
-        if (outer.optim.method == "nleqslv" | outer.optim.method == "Broyden"){
-        sol <- nleqslv(current_params, obj$estimating_equation_pp, method="Broyden",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "Newton"){
-        sol <- nleqslv(current_params, obj$estimating_equation_pp, method="Newton",
-                       control=list(maxit=optim.parameter5, allowSingular=FALSE))
-        new_params <- sol$x
-      } else if (outer.optim.method == "optim" | outer.optim.method == "SANN"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_pp(params))),
-                     method = "SANN", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      } else if (outer.optim.method == "BFGS"){
-        sol <- optim(par = current_params,
-                     fn = function(params) drop(crossprod(obj$estimating_equation_pp(params))),
-                     method = "BFGS", control = list(maxit=optim.parameter5, reltol=optim.parameter4))
-        new_params <- sol$par
-      }
-      current_params <- new_params
-      current_obj_value <- get_obj_value(new_params)
-      obj$setInitialCIFs(obj$getResults()$potential.CIFs)
-      ac <- assessConvergence(new_params, current_params, current_obj_value, optim.parameter1, optim.parameter2, optim.parameter3)
+    trace_df <- append_trace(
+      trace_df,
+      iteration = iteration,
+      computation.time.second = computation.time.second,
+      nleqslv.method = nleqslv.method,
+      nleqslv.info = nleqslv.info,
+      objective.function = ac$obj_value,
+      relative.difference = ac$relative.difference,
+      max.absolute.difference = ac$max.absolute.difference,
+      converged.by = if (ac$converged) ac$converged.by else FALSE,
+      coefficient = if (store_params) new_params else NULL
+    )
 
-      outer.optim.info <- extractOptimizationInfo(sol, outer.optim.method)
-      computation.time.second <- as.numeric((proc.time() - computation.time0)[3]) * 1000  # ms
-      trace_df <- append_trace(
-        trace_df,
-        iteration = iteration,
-        computation.time.second = computation.time.second,
-        outer.optim.method = outer.optim.method,
-        outer.optim.info = outer.optim.info,
-        objective.function = ac$obj_value,
-        relative.difference = ac$relative.difference,
-        max.absolute.difference = ac$max.absolute.difference,
-        converged.by = if (ac$converged) ac$converged.by else FALSE,
-        coefficient = if (store_params) new_params else NULL
-      )
-      if (ac$converged) break
-    }
+    current_params <- new_params
+    max.absolute.difference <- ac$max.absolute.difference
+    if (ac$converged) break
   }
   out_getResults <- obj$getResults()
 
@@ -562,40 +449,13 @@ polyreg <- function(
     } else if (outcome.type=="BINOMIAL" | outcome.type=="SURVIVAL") {
       index_coef <- seq_len(out_normalizeCovariate$n_covariate+2)
     }
-
-    if (outcome.type=="COMPETING-RISK") {
-      boot_function <- function(data, indices) {
-        coef <- solveEstimatingEquationC(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0)
-        return(coef)
-      }
-    } else if (outcome.type=="SURVIVAL") {
-      boot_function <- function(data, indices) {
-        return(solveEstimatingEquationS(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
-        ))
-      }
-    } else if (outcome.type=="BINOMIAL") {
-      boot_function <- function(data, indices) {
-        return(solveEstimatingEquationB(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data = data[indices, , drop = FALSE], estimand=estimand, optim.method=optim.method, data.initial.values=alpha_beta_0
-        ))
-      }
-    } else     if (outcome.type=="PROPORTIONAL") {
-      boot_function <- function(data, indices) {
-        return(solveEstimatingEquationP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                        sorted_data = data[indices, , drop = FALSE], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
-        ))
-      }
-    } else if (outcome.type=="POLY-PROPORTIONAL") {
-      boot_function <- function(data, indices) {
-        return(solveEstimatingEquationPP(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                         sorted_data = data[indices, , drop = FALSE], estimand=estimand, out_normalizeCovariate=out_normalizeCovariate, optim.method=optim.method, data.initial.values=alpha_beta_0
-        ))
-      }
+    boot_function <- function(data, indices) {
+      coef <- solveEstimatingEquation(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
+                                      normalized_data = data[indices, , drop = FALSE], outcome.type=outcome.type, estimand=estimand, optim.method=optim.method, out_normalizeCovariate=out_normalizeCovariate, prob.bound=prob.bound, alpha_beta_0=alpha_beta_0)
+      return(coef)
     }
 
-    out_boot <- boot(sorted_data, boot_function, R = boot.parameter1)
+    out_boot <- boot(normalized_data, boot_function, R = boot.parameter1)
     for (j in seq_len(length(index_coef))) {
       if (isTRUE(boot.bca)) {
         out_boot.ci <- boot.ci(out_boot, conf = conf.level, index = index_coef[j], type = c("norm", "bca"))
@@ -625,19 +485,19 @@ polyreg <- function(
   #######################################################################################################
   if (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL") {
     out_summary <- reportConstantEffects(
-      nuisance.model, exposure, estimand, out_bootstrap, out_getResults, iteration, max.absolute.difference, sol, optim.method$outer.optim.method
+      nuisance.model, exposure, estimand, out_bootstrap, out_getResults, iteration, max.absolute.difference, out_nleqslv, optim.method$nleqslv.method
     )
     out_data <- NULL
   } else {
     out_summary <- reportEffects (
       outcome.type, report.nuisance.parameter, report.optim.convergence, report.boot.conf, nuisance.model, exposure, estimand, alpha_beta_estimated,
-      cov_estimated, out_bootstrap, out_getResults, iteration, max.absolute.difference, sol,
-      conf.level, optim.method$outer.optim.method
+      cov_estimated, out_bootstrap, out_getResults, iteration, max.absolute.difference, out_nleqslv,
+      conf.level, optim.method$nleqslv.method
     )
-    sorted_data$influence.function <- out_calculateCov$influence.function
-    sorted_data$ip.weight <- out_getResults$ip.weight
-    sorted_data$potential.CIFs <- out_getResults$potential.CIFs
-    out_data <- sorted_data
+    normalized_data$influence.function <- out_calculateCov$influence.function
+    normalized_data$ip.weight <- out_getResults$ip.weight
+    normalized_data$potential.CIFs <- out_getResults$potential.CIFs
+    out_data <- normalized_data
   }
   out <- list(summary=out_summary, coefficient=alpha_beta_estimated, cov=cov_estimated, bootstrap=out_bootstrap, diagnosis.statistics=out_data, optimization.info=trace_df)
   return(out)

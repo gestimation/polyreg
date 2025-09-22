@@ -238,21 +238,6 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
   return(out)
 }
 
-sortByCovariate <- function(formula, data, optim.method, n_covariate) {
-  if (optim.method$computation.order.method == "SEQUENTIAL" & n_covariate>0) {
-    terms_obj <- terms(formula)
-    covariate_names <- attr(terms_obj, "term.labels")
-    missing_vars <- setdiff(covariate_names, names(data))
-    if (length(missing_vars) > 0) {
-      stop("The following covariates are missing: ", paste(missing_vars, collapse = ", "))
-    }
-    sorted_data <- data[do.call(order, data[covariate_names]), , drop = FALSE]
-    return(sorted_data)
-  } else {
-    return(data)
-  }
-}
-
 checkSpell_new <- function(outcome.type, effect.measure1, effect.measure2) {
   # 必須パッケージの存在チェック（attachしない）
   required_packages <- c("nleqslv", "boot")
@@ -291,12 +276,12 @@ checkSpell_new <- function(outcome.type, effect.measure1, effect.measure2) {
   list(outcome.type = ot, effect.measure1 = e1, effect.measure2 = e2)
 }
 
-checkInput_new <- function(outcome.type, conf.level, report.boot.conf, outer.optim.method, inner.optim.method) {
+checkInput_new <- function(outcome.type, conf.level, report.boot.conf, nleqslv.method, inner.optim.method) {
   if (!is.numeric(conf.level) || length(conf.level) != 1L || conf.level <= 0 || conf.level >= 1)
     stop("conf.level must be a single number in (0, 1).")
 
   outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
-  outer.optim.method <- match.arg(outer.optim.method, choices = outer_choices)
+  nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
 
   inner_choices <- c("optim","BFGS","SANN","multiroot")
   inner.optim.method <- match.arg(inner.optim.method, choices = inner_choices)
@@ -310,12 +295,12 @@ checkInput_new <- function(outcome.type, conf.level, report.boot.conf, outer.opt
   list(
     conf.level = conf.level,
     report.boot.conf = report.boot.conf,
-    outer.optim.method = outer.optim.method,
+    nleqslv.method = nleqslv.method,
     inner.optim.method = inner.optim.method
   )
 }
 
-checkInput <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, outer.optim.method, inner.optim.method) {
+checkInput <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, nleqslv.method, inner.optim.method) {
   cl <- match.call()
   if (missing(formula)) stop("A formula argument is required")
   mf <- match.call(expand.dots = TRUE)[1:3]
@@ -352,14 +337,14 @@ checkInput <- function(data, formula, code.event1, code.event2, code.censoring, 
 #  order_choices <- c("PARALLEL","SEQUENTIAL")
 #  computation.order.method <- match.arg(computation.order.method, choices = order_choices)
   outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
-  outer.optim.method <- match.arg(outer.optim.method, choices = outer_choices)
+  nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
   inner_choices <- c("optim","BFGS","SANN","multiroot")
   inner.optim.method <- match.arg(inner.optim.method, choices = inner_choices)
   return(list(report.boot.conf = report.boot.conf.corrected))
-  #  if (outcome.type == "COMPETING-RISK" & !outer.optim.method %in% c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot","partial")) {
+  #  if (outcome.type == "COMPETING-RISK" & !nleqslv.method %in% c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot","partial")) {
   #   stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN', 'multiroot' or 'partial'.")
   #  }
-  #  if (outcome.type == "SURVIVAL" & outer.optim.method == "partial") {
+  #  if (outcome.type == "SURVIVAL" & nleqslv.method == "partial") {
   #    stop("Invalid input for 'optimization'. Choose 'nleqslv', 'Newton', 'Broyden', 'optim', 'BFGS', 'SANN' or 'multiroot'.")
   #  }
   #  if (!inner.optim.method %in% c("optim","BFGS","SANN","multiroot")) {
@@ -427,22 +412,22 @@ extractOptimizationInfo <- function(sol, method) {
   return(out)
 }
 
-append_trace <- function(trace_df, iteration, computation.time.second = NA_real_, outer.optim.method, objective.function, relative.difference,
-                         max.absolute.difference, converged.by, outer.optim.info, store_params = FALSE,
+append_trace <- function(trace_df, iteration, computation.time.second = NA_real_, nleqslv.method, objective.function, relative.difference,
+                         max.absolute.difference, converged.by, nleqslv.info, store_params = FALSE,
                          coefficient = NULL) {
   row <- data.frame(
     iteration = iteration,
     computation.time.second = computation.time.second,
-    outer.optim.method = outer.optim.method,
+    nleqslv.method = nleqslv.method,
     objective.function = objective.function,
     relative.difference = relative.difference,
     max.absolute.difference = max.absolute.difference,
     converged.by = if (isTRUE(converged.by)) NA_character_ else as.character(converged.by),
-    code = outer.optim.info$code %||% NA_integer_,
-    msg  = outer.optim.info$message %||% NA_character_,
-    fn_evals = outer.optim.info$fn.evals %||% NA_integer_,
-    gr_evals = outer.optim.info$gr.evals %||% NA_integer_,
-    jac_evals = outer.optim.info$jac.evals %||% NA_integer_,
+    code = nleqslv.info$code %||% NA_integer_,
+    msg  = nleqslv.info$message %||% NA_character_,
+    fn_evals = nleqslv.info$fn.evals %||% NA_integer_,
+    gr_evals = nleqslv.info$gr.evals %||% NA_integer_,
+    jac_evals = nleqslv.info$jac.evals %||% NA_integer_,
     stringsAsFactors = FALSE
   )
   if (isTRUE(store_params)) {
