@@ -106,7 +106,7 @@ polyreg <- function(
   outcome.type <- cs$outcome.type
   ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, computation.order.method, nleqslv.method, inner.optim.method)
   report.boot.conf <- ci$report.boot.conf
-  tp <- read_time.point(nuisance.model, data, outcome.type, code.censoring, time.point)
+  tp <- read_time.point(nuisance.model, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point)
 
   estimand <- list(
     effect.measure1=cs$effect.measure1,
