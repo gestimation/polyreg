@@ -1,3 +1,123 @@
+## K-level residuals (length = 2K)
+## log_p: [p1_ref, p1_L2..p1_LK, p2_ref, p2_L2..p2_LK]
+## alpha1, alpha2: numeric length K-1  (ℓ = 2..K に対応)
+## beta1, beta2: numeric scalar
+## effect.measure*: "RR" | "OR" | "SHR" | ""(=SHR)
+residuals_CIFs_K <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, c1,c2) {
+  effect.measure1 <- estimand$effect.measure1
+  effect.measure2 <- estimand$effect.measure2
+  clogp <- clampLogP(as.numeric(log_p))
+  m <- length(clogp); if (m %% 2L != 0L) stop("log_p length must be even (2K).")
+  K <- m %/% 2L
+  if (length(alpha1) != K-1 || length(alpha2) != K-1)
+    stop("alpha1/alpha2 must have length K-1.")
+  if (is.null(effect.measure1) || identical(effect.measure1, "")) effect.measure1 <- "SHR"
+  if (is.null(effect.measure2) || identical(effect.measure2, "")) effect.measure2 <- "SHR"
+
+  i1 <- 1:K                      # indices for event1 block
+  i2 <- (K+1):(2*K)              # indices for event2 block
+  p1 <- exp(clogp[i1])
+  p2 <- exp(clogp[i2])
+
+  ## 残り確率は「各レベルごと」に計算（ref と各ℓのペア）
+  rem <- pmax(1 - p1 - p2, prob.bound)
+  lrem <- log(rem)
+
+  r <- numeric(2*K)
+
+  ## ---- α constraints: 各 ℓ=2..K で2本（event1/event2）
+  for (ell in 2:K) {
+    ## event1: α1_ℓ-1 - log p1_ref - log p1_ℓ + log rem_ref + log rem_ℓ = 0
+    r[ell - 1]        <- alpha1[ell - 1] - clogp[i1[1]] - clogp[i1[ell]] + lrem[1] + lrem[ell]
+    ## event2: α2_ℓ-1 - log p2_ref - log p2_ℓ + log rem_ref + log rem_ℓ = 0
+    r[(K - 1) + (ell - 1)] <- alpha2[ell - 1] - clogp[i2[1]] - clogp[i2[ell]] + lrem[1] + lrem[ell]
+  }
+
+  ## ---- β constraints（各イベント1本に集約）
+  ## RR:      beta - log p_L + log p_ref
+  ## OR:      beta - [logit(p_L) - logit(p_ref)]
+  ## SHR:     exp(beta) - [ log(1-p_L) / log(1-p_ref) ]
+  agg_res <- function(meas, pref, pL, clogpref, clogpL, beta) {
+    if (meas == "RR") {
+      sum(beta - clogpL + clogpref)
+    } else if (meas == "OR") {
+      sum(beta - (log(pL) - log1p(-pL)) + (log(pref) - log1p(-pref)))
+    } else if (meas == "SHR") {
+      Bi <- log1p(-pref)        # < 0
+      Bj <- log1p(-pL)
+      sum(exp(beta) - (Bj / Bi))
+    } else stop("effect.measure must be RR/OR/SHR.")
+  }
+  r[2*K - 1] <- agg_res(effect.measure1, p1[1], p1[2:K], clogp[i1[1]], clogp[i1[2:K]], beta1)
+  r[2*K]     <- agg_res(effect.measure2, p2[1], p2[2:K], clogp[i2[1]], clogp[i2[2:K]], beta2)
+
+  r
+}
+
+jacobian_CIFs_K <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound, c1,c2) {
+  effect.measure1 <- estimand$effect.measure1
+  effect.measure2 <- estimand$effect.measure2
+  clogp <- clampLogP(as.numeric(log_p))
+  m <- length(clogp); if (m %% 2L != 0L) stop("log_p length must be even (2K).")
+  K <- m %/% 2L
+  i1 <- 1:K; i2 <- (K+1):(2*K)
+  p1 <- exp(clogp[i1]); p2 <- exp(clogp[i2])
+  rem <- pmax(1 - p1 - p2, prob.bound)
+
+  dlogrem_dlp1 <- (-p1) / rem
+  dlogrem_dlp2 <- (-p2) / rem
+
+  J <- matrix(0.0, nrow = 2*K, ncol = 2*K)
+
+  ## α 行
+  for (ell in 2:K) {
+    r1 <- ell - 1
+    J[r1,   i1[1]]   <- -1 + dlogrem_dlp1[1]
+    J[r1,   i2[1]]   <-       dlogrem_dlp2[1]
+    J[r1,   i1[ell]] <- -1 + dlogrem_dlp1[ell]
+    J[r1,   i2[ell]] <-       dlogrem_dlp2[ell]
+
+    r2 <- (K - 1) + (ell - 1)
+    J[r2,   i2[1]]   <- -1 + dlogrem_dlp2[1]
+    J[r2,   i1[1]]   <-       dlogrem_dlp1[1]
+    J[r2,   i2[ell]] <- -1 + dlogrem_dlp2[ell]
+    J[r2,   i1[ell]] <-       dlogrem_dlp1[ell]
+  }
+
+  add_effect_grad <- function(meas, pref, pL, row, idx_ref, idx_L) {
+    if (meas == "RR") {
+      ## d/d log p_ref: +1 を (K-1) 回分加算、d/d log p_L: -1
+      J[row, idx_ref] <- J[row, idx_ref] + (K - 1)
+      for (k in idx_L) J[row, k] <- J[row, k] - 1
+    } else if (meas == "OR") {
+      ## d/d log p = d/dp * dp/dlogp = g'(p) * p
+      ## g(p)=logit(p)=log p - log(1-p) → g'(p)=1/p + 1/(1-p)
+      ## ref: +[1 + p_ref/(1-p_ref)] を (K-1) 回
+      J[row, idx_ref] <- J[row, idx_ref] + (1 + pref/(1 - pref)) * (K - 1)
+      for (k in seq_along(idx_L)) {
+        pl <- pL[k]
+        J[row, idx_L[k]] <- J[row, idx_L[k]] + (-1 - pl/(1 - pl))
+      }
+    } else if (meas == "SHR") {
+      Bi <- log1p(-pref)   # <0
+      ## ref への寄与: sum_ℓ (Bj * (-pref/(1-pref))) / Bi^2
+      coef_ref <- sum(log1p(-pL)) * ( -pref/(1 - pref) ) / (Bi^2)
+      J[row, idx_ref] <- J[row, idx_ref] + coef_ref
+      ## 各 L: pL / ((1 - pL) * Bi)
+      for (k in seq_along(idx_L)) {
+        pl <- pL[k]
+        J[row, idx_L[k]] <- J[row, idx_L[k]] + pl / ((1 - pl) * Bi)
+      }
+    } else stop("effect.measure must be RR/OR/SHR.")
+  }
+
+  row_e1 <- 2*K - 1
+  row_e2 <- 2*K
+  add_effect_grad(effect.measure1, pref = p1[1], pL = p1[2:K], row = row_e1, idx_ref = i1[1], idx_L = i1[2:K])
+  add_effect_grad(effect.measure2, pref = p2[1], pL = p2[2:K], row = row_e2, idx_ref = i2[1], idx_L = i2[2:K])
+
+  J
+}
 
 chooseEffectMeasureLevenbergMarquardt <- function(effect.measure, index) {
   i <- index[1]; j <- index[2]
@@ -167,6 +287,8 @@ LevenbergMarquardt <- function(start,
 
 callLevenbergMarquardt <- function(log_CIFs0, alpha1, beta1, alpha2, beta2, optim.method, estimand, prob.bound, cemlm1, cemlm2)
 {
+  #  res_fun <- function(lp) residuals_CIFs_K(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
+  #  jac_fun <- function(lp) jacobian_CIFs_K(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
   res_fun <- function(lp) residuals_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
   jac_fun <- function(lp) jacobian_CIFs_generic(lp, alpha1, beta1, alpha2, beta2, estimand, prob.bound, cemlm1, cemlm2)
   out_LevenbergMarquardt <- LevenbergMarquardt(
