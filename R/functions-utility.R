@@ -61,7 +61,7 @@ Event <- function(time, event) {
     if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- event
-  } else if (is.is.logical(event)) {
+  } else if (is.logical(event)) {
     if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- as.numeric(event)
@@ -148,6 +148,25 @@ calculateIndexForParameter <- function(i_parameter,x_l,x_a,length.time.point=1) 
   i_parameter[7] <- 2 * i_parameter[1] + 2 * ncol(x_a)
   i_parameter[8] <- length.time.point*(2 * i_parameter[1]) + 2 * ncol(x_a)
   return(i_parameter)
+}
+
+extractExposureDesign <- function(data, exposure, estimand) {
+  a_raw <- data[[exposure]]
+  if (anyNA(a_raw)) stop("exposure variable includes NA")
+  a_ <- factor(a_raw)
+  lev <- levels(a_)
+
+  ref <- if (!is.null(estimand$code.exposure.ref)) as.character(estimand$code.exposure.ref) else lev[1]
+  if (!ref %in% lev) {
+    stop(sprintf("Reference specified by code.exposure.ref not included in exposure levels",ref, paste(lev, collapse = ", ")))
+  }
+
+  a_ <- stats::relevel(a_, ref = ref)
+  x_a <- stats::model.matrix(~ a_)[, -1, drop = FALSE]
+  attr(x_a, "levels") <- levels(a_)
+  attr(x_a, "reference") <- ref
+  colnames(x_a) <- sub("^a_", "A:", colnames(x_a))
+  x_a
 }
 
 create_rr_text <- function(coefficient, cov, index, omit.conf.int=TRUE, conf.int=0.95) {

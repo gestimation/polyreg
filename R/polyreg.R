@@ -308,7 +308,7 @@ polyreg <- function(
     new_params <- out_nleqslv$x
 
     current_obj_value <- get_obj_value(new_params)
-    obj$setInitialCIFs(obj$getResults()$potential.CIFs)
+    obj$setInitialCIFs(obj$getResults()$predicted.CIFs)
     ac <- assessConvergence(new_params, prev_params, current_obj_value,optim.parameter1, optim.parameter2, optim.parameter3)
 
     nleqslv.info <- extractOptimizationInfo(out_nleqslv, nleqslv.method)
