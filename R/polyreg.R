@@ -113,7 +113,8 @@ polyreg <- function(
     code.event1=code.event1,
     code.event2=code.event2,
     code.censoring=code.censoring,
-    code.exposure.ref=code.exposure.ref
+    code.exposure.ref=code.exposure.ref,
+    exposure.levels=2
   )
   optim.method <- list(
     nleqslv.method = nleqslv.method,
@@ -158,6 +159,7 @@ polyreg <- function(
       out_normalizeCovariate = out_normalizeCovariate
     )
   }
+#  alpha_beta_0 <- c(0,0,0,0,0,0,0,0)
 
   #######################################################################################################
   # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
@@ -179,7 +181,7 @@ polyreg <- function(
       call_and_capture <- function(fun, ...) {
       out_ipcw <<- do.call(fun, list(...))
       out_ipcw$ret
-    }
+      }
       estimating_equation_i <- function(p) call_and_capture(
         estimating_equation_ipcw,
         formula = nuisance.model, data = normalized_data, exposure = exposure,
@@ -296,7 +298,7 @@ polyreg <- function(
   store_params <- TRUE
 
   while ((iteration < optim.parameter4) & (max.absolute.difference > optim.parameter1)) {
-    iteration <- iteration + 1L
+    iteration <- iteration + 1
     prev_params <- current_params
 
     out_nleqslv <- nleqslv(
@@ -361,7 +363,8 @@ polyreg <- function(
       if (length(adj) != length(current_params))stop("Length of adj (range) must match length of current_params.")
       alpha_beta_estimated <- adj * current_params
       adj_matrix <- diag(adj, length(adj))
-      cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
+      #cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
+      cov_estimated <- NULL
     } else {
       alpha_beta_estimated <- current_params
       cov_estimated <- out_calculateCov$cov_estimated
@@ -371,7 +374,8 @@ polyreg <- function(
 
   out_calculateCov <- switch(
     outcome.type,
-    "COMPETING-RISK" = calculateCov(out_getResults, estimand, prob.bound),
+#    "COMPETING-RISK" = calculateCov(out_getResults, estimand, prob.bound),
+    "COMPETING-RISK" = NULL,
     "SURVIVAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "BINOMIAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "PROPORTIONAL" = NULL,

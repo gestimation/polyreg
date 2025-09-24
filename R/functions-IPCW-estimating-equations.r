@@ -17,8 +17,8 @@ estimating_equation_ipcw <- function(
   mf[[1]] <- as.name("model.frame")
   mf <- eval(mf, parent.frame())
   Y <- model.extract(mf, "response")
-  t <- Y[, 1]  # time variable
-  epsilon <- Y[, 2]  # status variable
+  t <- Y[, 1]
+  epsilon <- Y[, 2]
   if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
     ts <- survival::untangle.specials(Terms, "offset")
     if (length(ts$vars) > 0) {
@@ -30,7 +30,6 @@ estimating_equation_ipcw <- function(
   } else {
     offset <- rep(0, nrow(mf))
   }
-
   y_0 <- ifelse(epsilon == estimand$code.censoring | t > estimand$time.point, 1, 0)
   y_1 <- ifelse(epsilon == estimand$code.event1 & t <= estimand$time.point, 1, 0)
   y_2 <- ifelse(epsilon == estimand$code.event2 & t <= estimand$time.point, 1, 0)
@@ -48,12 +47,15 @@ estimating_equation_ipcw <- function(
   x_la <- cbind(x_l, x_a)
   i_parameter <- rep(NA, 7)
   i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
+  print(i_parameter)
 
   potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-  one <- rep(1, nrow(x_l))
-  a <- as.vector(x_a)
-  ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
-  ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
+  print(dim(potential.CIFs))
+  ey <- calculateEY(potential.CIFs, x_a)
+  ey_1 <- ey$ey_1
+  ey_2 <- ey$ey_2
+  #ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
+  #ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 
   v11 <- ey_1 * (1 - ey_1)
   v12 <- -ey_1 * ey_2
@@ -74,14 +76,12 @@ estimating_equation_ipcw <- function(
   d    <- rbind(tmp1, tmp2)
   residual <- c(wy_1ey_1, wy_2ey_2)
   ret <- drop(crossprod(d, residual)) / nrow(x_l)
-  #ret <- as.vector(t(d) %*% residual / nrow(x_l))
 
   n_col_d <- ncol(d)
   score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
   for (j in seq_len(n_col_d)) {
     score.matrix[,j] <- d[,j]*residual
   }
-  colnames(potential.CIFs) <- c("p10", "p20", "p11", "p21")
   out <- list(
     ret   = ret,
     score = score.matrix,
@@ -104,6 +104,19 @@ estimating_equation_ipcw <- function(
     i_parameter = i_parameter
   )
   return(out)
+}
+
+calculateEY <- function(potential.CIFs, x_a) {
+  n <- nrow(x_a)
+  K <- ncol(x_a) + 1
+  if (nrow(potential.CIFs) != n) stop("Row dimension of potential.CIFs is more than rows of x_a")
+  if (ncol(potential.CIFs) != 2*K) stop("Column dimension of potential.CIFs is not 2*K")
+  index <- max.col(cbind(0, x_a), ties.method = "first")
+  CIF1 <- potential.CIFs[, seq_len(K), drop = FALSE]
+  CIF2 <- potential.CIFs[, K + seq_len(K), drop = FALSE]
+  ey_1 <- CIF1[cbind(seq_len(n), index)]
+  ey_2 <- CIF2[cbind(seq_len(n), index)]
+  return(list(ey_1 = ey_1, ey_2 = ey_2))
 }
 
 calculateCov <- function(objget_results, estimand, prob.bound)
@@ -157,9 +170,6 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   hesse_d11 <- crossprod(x_la, w11 * out_calculateD$d_11) / n
   hesse_d12 <- crossprod(x_la, w12 * out_calculateD$d_12) / n
   hesse_d22 <- crossprod(x_la, w22 * out_calculateD$d_22) / n
-  #hesse_d11 <- t(x_la) %*% (w11 * out_calculateD$d_11) / n
-  #hesse_d12 <- t(x_la) %*% (w12 * out_calculateD$d_12) / n
-  #hesse_d22 <- t(x_la) %*% (w22 * out_calculateD$d_22) / n
 
   hesse_d1 <- cbind(hesse_d11, hesse_d12)
   hesse_d2 <- cbind(hesse_d12, hesse_d22)
@@ -168,8 +178,6 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   total_score <- cbind(AB1, AB2)
   influence.function <- t(solve(hesse, t(total_score)))
   cov_estimated <- crossprod(influence.function) / n^2
-  #influence.function <- total_score %*% t(solve(hesse))
-  #cov_estimated <- t(influence.function) %*% influence.function / n / n
   if (ncol(influence.function)==4) {
     colnames(influence.function) <- c("intercept", "exposure", "intercept", "exposure")
   } else if (ncol(influence.function)>4) {
@@ -179,7 +187,7 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 
-calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
+calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) { #分類曝露未対応
   CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
   CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
   CIF3 <- ifelse(potential.CIFs[, 3] == 0, prob.bound, ifelse(potential.CIFs[, 3] == 1, 1 - prob.bound, potential.CIFs[, 3]))
@@ -204,14 +212,16 @@ calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   a <- as.vector(x_a)
   n <- length(x_a)
   a11 <- a12 <- a22 <- NULL
-  a11 <- calculateA(estimand$effect.measure1, CIF3, CIF1, a)
-  a22 <- calculateA(estimand$effect.measure2, CIF4, CIF2, a)
+  a11 <- calculateA(estimand$effect.measure1, CIF2, CIF1, a)
+  a22 <- calculateA(estimand$effect.measure2, CIF4, CIF3, a)
+#  a11 <- calculateA(estimand$effect.measure1, CIF3, CIF1, a)
+#  a22 <- calculateA(estimand$effect.measure2, CIF4, CIF2, a)
   a12 <- matrix(0, nrow = n, ncol = 1)
 
   d_ey_d_beta_11 <- a22 / (a11 * a22 - a12 * a12)
   d_ey_d_beta_12 <- -a12 / (a11 * a22 - a12 * a12)
   d_ey_d_beta_22 <- a11 / (a11 * a22 - a12 * a12)
-  c12 <- a * (1 / (1 - CIF3 - CIF4)) + (1 - a) * (1 / (1 - CIF1 - CIF2))
+  c12 <- a * (1 / (1 - CIF2 - CIF4)) + (1 - a) * (1 / (1 - CIF1 - CIF3))
   c11 <- a11 + c12
   c22 <- a22 + c12
   d_ey_d_alpha_11 <- c22 / (c11 * c22 - c12 * c12)
@@ -288,7 +298,6 @@ estimating_equation_survival <- function(
   d <- cbind(x_l, x_a)
   residual <- wy_1ey_1
   ret <- drop(crossprod(d, residual)) / nrow(x_l)
-  #ret <- as.vector(t(d) %*% residual / nrow(x_l))
 
   n_col_d <- ncol(d)
   score.matrix <- matrix(NA, nrow=nrow(d), ncol=n_col_d)
@@ -350,12 +359,9 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
     }
   }
   out_calculateDSurvival <- calculateDSurvival(potential.CIFs, x_a, x_l, estimand, prob.bound)
-#  hesse <- t(x_la) %*% (w11 * out_calculateDSurvival) / n
   hesse <- crossprod(x_la, w11 * out_calculateDSurvival) / n
 
   total_score <- AB1
-  #influence.function <- total_score %*% t(solve(hesse))
-  #cov_estimated <- t(influence.function) %*% influence.function / n / n
   influence.function <- t(solve(hesse, t(total_score)))
   cov_estimated <- crossprod(influence.function) / n^2
   if (ncol(influence.function)==2) {
@@ -585,7 +591,7 @@ estimating_equation_pproportional <- function(
   for (specific.time in time.point) {
     i_time <- i_time + 1
     i_para <- i_parameter[1]*(i_time-1)+1
-    alpha_beta_i[seq_len(i_parameter[1])]              <- alpha_beta[seq.int(i_para, i_para+i_parameter[1]-1)]
+    alpha_beta_i[seq_len(i_parameter[1])]                 <- alpha_beta[seq.int(i_para, i_para+i_parameter[1]-1)]
     alpha_beta_i[seq.int(i_parameter[2], i_parameter[3])] <- alpha_beta[i_parameter[8]/2]
     alpha_beta_i[seq.int(i_parameter[4], i_parameter[5])] <- alpha_beta[seq.int((i_parameter[8]/2+i_para),(i_parameter[8]/2+i_para+i_parameter[1]-1))]
     alpha_beta_i[seq.int(i_parameter[6], i_parameter[7])] <- alpha_beta[i_parameter[8]]
@@ -599,8 +605,10 @@ estimating_equation_pproportional <- function(
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
     potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
-    ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
+    #ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
+    #ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
+    ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
+    ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,3]*(one - a)
 
     v11 <- ey_1 * (1 - ey_1)
     v12 <- -ey_1 * ey_2
