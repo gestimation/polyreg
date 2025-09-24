@@ -90,6 +90,98 @@ Event <- function(time, event) {
   ss
 }
 
+defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefix = "a") {
+  stopifnot(is.data.frame(data))
+  if (!exposure %in% names(data)) {
+    stop("exposure = '", exposure, "' is not found in data.")
+  }
+
+  a_ <- data[[exposure]]
+  a_ <- factor(a_)
+  a_ <- base::droplevels(a_)
+  lev <- levels(a_)
+  K <- length(lev)
+
+  ref_lab <- NULL
+  if (!is.null(code.exposure.ref)) {
+    ref_lab <- if (is.numeric(code.exposure.ref)) as.character(code.exposure.ref) else code.exposure.ref
+    if (length(lev) > 0 && ref_lab %in% lev) {
+      a_ <- stats::relevel(a_, ref = ref_lab)
+    } else {
+      warning("code.exposure.ref = ", ref_lab," is not found among factor levels. The first level is used as reference.")
+      ref_lab <- NULL
+    }
+  }
+  if (is.null(ref_lab)) ref_lab <- lev[1L]
+  if (K < 1 || K == 1) stop("Exposure has only one level (", lev, ") or no valid levels. Effect estimation is not possible.")
+  X <- stats::model.matrix(~ a_)[, -1, drop = FALSE]
+  cn <- colnames(X)
+  cn <- sub("^a_", paste0(prefix, "_"), cn, perl = TRUE)
+  colnames(X) <- cn
+  return(list(
+    x_a = as.matrix(X),
+    exposure.levels = K,
+    exposure.labels = lev,
+    ref = ref_lab
+  ))
+}
+
+checkInput <- function(data, formula, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.boot.conf, nleqslv.method) {
+  cl <- match.call()
+  if (missing(formula)) stop("A formula argument is required")
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "offset", "cluster")
+  out_terms <- terms(formula, special, data = data)
+  if (!is.null(attr(out_terms, "specials")$strata))
+    stop("strata() cannot appear in formula")
+  if (!is.null(attr(out_terms, "specials")$offset))
+    stop("offset() cannot appear in formula")
+  if (!is.null(attr(out_terms, "specials")$cluster))
+    stop("cluster() cannot appear in formula")
+  mf$formula <- out_terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL","POLY-PROPORTIONAL","POLY-PROPORTIONAL")) {
+    if (!inherits(Y, c("Event", "Surv"))) {
+      stop("Surv- or Event-object is expected")
+    } else {
+      t <- as.numeric(Y[, 1])
+      if (any(t<0)) stop("Invalid time variable. Expected non-negative values. ")
+      if (any(is.na(t))) stop("Time variable contains NA.")
+
+      epsilon <- as.numeric(Y[, 2])
+      if (any(is.na(epsilon))) stop("Event variable contains NA.")
+      if (outcome.type == "SURVIVAL") {
+        if (!all(epsilon %in% c(code.event1, code.censoring)))
+          stop("SURVIVAL requires event codes {censoring,event1}.")
+      } else {
+        if (!all(epsilon %in% c(code.event1, code.event2, code.censoring)))
+          stop("COMPETING-RISK requires event codes {censoring,event1,event2}.")
+      }
+    }
+  }
+
+  out_defineExposureDesign <- defineExposureDesign(data, exposure, code.exposure.ref)
+  x_a <- out_defineExposureDesign$x_a
+  x_l <- model.matrix(out_terms, mf)
+  index.vector <- rep(NA, 7)
+  index.vector <- calculateIndexForParameter(NA,x_l,x_a)
+
+  if (!is.numeric(conf.level) || length(conf.level) != 1 || conf.level <= 0 || conf.level >= 1)
+    stop("conf.level must be a single number between 0 and 1")
+  if (is.null(report.boot.conf) & (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL')) {
+    report.boot.conf.corrected <- TRUE
+  } else if (is.null(report.boot.conf)) {
+    report.boot.conf.corrected <- FALSE
+  } else {
+    report.boot.conf.corrected <- report.boot.conf
+  }
+  outer_choices <- c("nleqslv","Newton","Broyden")
+  nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
+  return(list(report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
+}
+
 read_time.point <- function(formula, data, outcome.type, code.censoring, time.point) {
 #  read_time.point <- function(formula, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point) {
     if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
@@ -239,119 +331,7 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
   return(out)
 }
 
-checkSpell_new <- function(outcome.type, effect.measure1, effect.measure2) {
-  # 必須パッケージの存在チェック（attachしない）
-  required_packages <- c("nleqslv", "boot")
-  miss   <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(miss)) stop("Required packages not installed: ", paste(miss, collapse = ", "))
 
-  # 正規化：大文字化＋空白/ハイフン等の除去
-  canon <- function(x) {
-    s <-
-      if (is.character(x)) x[1L]
-    else if (is.factor(x)) as.character(x)[1L]
-    else paste(deparse(x), collapse = " ")  # 関数・式・数値なども全部OK
-    toupper(gsub("[^A-Z]", "", trimws(s)))
-  }
-
-  ot_map <- c(
-    "C"="COMPETINGRISK","CR"="COMPETINGRISK","COMPETINGRISK"="COMPETINGRISK","COMPETINGRISKS"="COMPETINGRISK",
-    "S"="SURVIVAL","SURVIVAL"="SURVIVAL",
-    "B"="BINOMIAL","BINOMIAL"="BINOMIAL",
-    "P"="PROPORTIONAL","PROPORTIONAL"="PROPORTIONAL",
-    "PP"="POLY-PROPORTIONAL","POLYPROPORTIONAL"="POLY-PROPORTIONAL"
-  )
-  ot <- ot_map[[canon(outcome.type)]]
-  if (is.null(ot)) stop("Invalid outcome.type. Use COMPETINGRISK, SURVIVAL, BINOMIAL, PROPORTIONAL, POLY-PROPORTIONAL.")
-
-  em_map <- c(
-    "RR"="RR","RISKRATIO"="RR",
-    "OR"="OR","ODDSRATIO"="OR",
-    "SHR"="SHR","HR"="SHR",
-    "SUBDISTRIBUTIONHAZARDRATIO"="SHR"
-  )
-  e1 <- em_map[[canon(effect.measure1)]]
-  e2 <- em_map[[canon(effect.measure2)]]
-  if (is.null(e1)) stop("Invalid effect.measure1. Use: RR, OR, SHR.")
-  if (is.null(e2)) stop("Invalid effect.measure2. Use: RR, OR, SHR.")
-  list(outcome.type = ot, effect.measure1 = e1, effect.measure2 = e2)
-}
-
-checkInput_new <- function(outcome.type, conf.level, report.boot.conf, nleqslv.method, inner.optim.method) {
-  if (!is.numeric(conf.level) || length(conf.level) != 1L || conf.level <= 0 || conf.level >= 1)
-    stop("conf.level must be a single number in (0, 1).")
-
-  outer_choices <- c("nleqslv","Newton","Broyden","optim","BFGS","SANN","multiroot")
-  nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
-
-  inner_choices <- c("optim","BFGS","SANN","multiroot")
-  inner.optim.method <- match.arg(inner.optim.method, choices = inner_choices)
-
-  if (is.null(report.boot.conf)) {
-    report.boot.conf <- outcome.type %in% c("PROPORTIONAL","POLY-PROPORTIONAL")
-  } else {
-    report.boot.conf <- isTRUE(report.boot.conf)
-  }
-
-  list(
-    conf.level = conf.level,
-    report.boot.conf = report.boot.conf,
-    nleqslv.method = nleqslv.method,
-    inner.optim.method = inner.optim.method
-  )
-}
-
-checkInput <- function(data, formula, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.boot.conf, nleqslv.method) {
-  cl <- match.call()
-  if (missing(formula)) stop("A formula argument is required")
-  mf <- match.call(expand.dots = TRUE)[1:3]
-  special <- c("strata", "offset", "cluster")
-  out_terms <- terms(formula, special, data = data)
-  if (!is.null(attr(out_terms, "specials")$strata))
-    stop("strata() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$offset))
-    stop("offset() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$cluster))
-    stop("cluster() cannot appear in formula")
-  mf$formula <- out_terms
-  mf[[1]] <- as.name("model.frame")
-  mf <- eval(mf, parent.frame())
-  Y <- model.extract(mf, "response")
-  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL","POLY-PROPORTIONAL","POLY-PROPORTIONAL")) {
-    if (!inherits(Y, c("Event", "Surv"))) {
-      stop("Surv- or Event-object is expected")
-    } else {
-      t <- Y[, 1]
-      if (any(t<0)) stop("Invalid time variable. Expected non-negative values. ")
-      if (!all(Y[, 2] %in% c(code.event1, code.event2, code.censoring))) stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
-    }
-  }
-
-  a_ <- as.factor(data[[exposure]])
-  if (code.exposure.ref==0) {
-    x_a <- as.matrix(model.matrix(~ a_)[, -1])
-  } else {
-    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
-  }
-
-  exposure.levels <- ncol(x_a)+1
-  x_l <- model.matrix(out_terms, mf)
-  index.vector <- rep(NA, 7)
-  index.vector <- calculateIndexForParameter(NA,x_l,x_a)
-
-  if (!is.numeric(conf.level) || length(conf.level) != 1 || conf.level <= 0 || conf.level >= 1)
-    stop("conf.level must be a single number between 0 and 1")
-  if (is.null(report.boot.conf) & (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL')) {
-    report.boot.conf.corrected <- TRUE
-  } else if (is.null(report.boot.conf)) {
-    report.boot.conf.corrected <- FALSE
-  } else {
-    report.boot.conf.corrected <- report.boot.conf
-  }
-  outer_choices <- c("nleqslv","Newton","Broyden")
-  nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
-  return(list(report.boot.conf = report.boot.conf.corrected, exposure.levels=exposure.levels, index.vector=index.vector))
-}
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {
@@ -389,6 +369,7 @@ checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   }
   return(list(outcome.type = outcome.type.corrected, effect.measure1 = effect.measure1.corrected, effect.measure2 = effect.measure2.corrected))
 }
+
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 extractOptimizationInfo <- function(sol, method) {
@@ -436,53 +417,5 @@ append_trace <- function(trace_df, iteration, computation.time.second = NA_real_
   }
   if (is.null(trace_df)) return(row)
   rbind(trace_df, row)
-}
-
-defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefix = "a") {
-  stopifnot(is.data.frame(data))
-  if (!exposure %in% names(data)) {
-    stop("exposure = '", exposure, "' is not found in data.")
-  }
-
-  # 1) Convert to factor
-  a_raw <- data[[exposure]]
-  a_ <- factor(a_raw)
-  a_ <- base::droplevels(a_)
-  lev <- levels(a_)
-  K <- length(lev)
-
-  # 2) Handle reference category
-  ref_lab <- NULL
-  if (!is.null(code.exposure.ref)) {
-    ref_lab <- if (is.numeric(code.exposure.ref)) as.character(code.exposure.ref) else code.exposure.ref
-    if (length(lev) > 0 && ref_lab %in% lev) {
-      a_ <- stats::relevel(a_, ref = ref_lab)
-    } else {
-      warning("code.exposure.ref = ", ref_lab,
-              " is not found among factor levels. The first level is used as reference.")
-      ref_lab <- NULL
-    }
-  }
-  if (is.null(ref_lab)) ref_lab <- lev[1L]
-
-  # 3) Sanity check for levels
-  if (K < 1 || K == 1) stop("Exposure has only one level (", lev, ") or no valid levels. Effect estimation is not possible.")
-
-  # 4) Design matrix (treatment coding: K-1 columns)
-  X <- stats::model.matrix(~ a_)[, -1, drop = FALSE]
-
-  # 5) Rename columns with prefix
-  cn <- colnames(X)
-  cn <- sub("^a_", paste0(prefix, "_"), cn, perl = TRUE)
-  colnames(X) <- cn
-
-  return(list(
-    x_a = as.matrix(X),
-    levels = lev,
-    ref = ref_lab,
-    K = K,
-    is_binary = (K == 2L),
-    coding = "treatment(K-1)"
-  ))
 }
 

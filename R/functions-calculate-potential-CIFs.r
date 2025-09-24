@@ -264,14 +264,12 @@ calculatePotentialCIFs <- function(alpha_beta_tmp, x_a, x_l, offset, epsilon, es
 }
 
 calculatePotentialRisk <- function(alpha_beta, x_a, x_l, offset, estimand) {
-  i_parameter <- rep(NA_integer_, 7L)
-  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
-
+  index.vector <- estimand$index.vector
   one <- rep(1, nrow(x_l))
   alpha_beta_ <- as.matrix(as.vector(alpha_beta))
   if (ncol(alpha_beta_) == 1L) alpha_beta_ <- t(alpha_beta_)
-  phi <- x_l %*% alpha_beta_[, seq_len(i_parameter[1])] + offset
-  theta <- one * alpha_beta_[, i_parameter[2]]
+  phi <- x_l %*% alpha_beta_[, seq_len(index.vector[1])] + offset
+  theta <- one * alpha_beta_[, index.vector[2]]
 
   if (estimand$effect.measure1 == "RR") {
     expphi <- exp(phi)

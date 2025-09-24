@@ -85,7 +85,6 @@ get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.s
   for (i in seq_along(predicted.time)) {
     t <- predicted.time[i]
 
-    # strataがNULL、または predicted.strata[i] がNAの場合は共通の方法でサバイバル推定
     if (is.null(estimated.strata) || is.null(predicted.strata) || is.na(predicted.strata[i])) {
       time_until_t <- estimated.time[estimated.time < t]
       if (length(time_until_t) > 0) {
@@ -97,7 +96,6 @@ get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.s
     } else {
       strata_index <- predicted.strata[i]
 
-      # strata_index が範囲外でないことをチェック
       if (!is.na(strata_index) && strata_index > 0 && strata_index <= length(estimated.strata)) {
         strata_size <- estimated.strata[strata_index]
 
@@ -172,7 +170,7 @@ createCensoringFormula <- function(formula, code.censoring.updated, strata_name 
     rhs <- quote(+1)  # Intercept-only model
   } else {
     if (!is.character(strata_name)) {
-      strata_name <- deparse(substitute(strata_name))  # Convert non-character input to character
+      strata_name <- deparse(substitute(strata_name))
     }
     rhs <- as.call(list(as.symbol("strata"), as.symbol(strata_name)))
   }

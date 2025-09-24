@@ -114,9 +114,10 @@ polyreg <- function(
     code.event2=code.event2,
     code.censoring=code.censoring,
     code.exposure.ref=code.exposure.ref,
-    exposure.levels=ci$exposure.levels,
+    exposure.levels=ci$out_defineExposureDesign$exposure.levels,
     index.vector=ci$index.vector
   )
+
   optim.method <- list(
     nleqslv.method = nleqslv.method,
     optim.parameter1 = optim.parameter1,
@@ -247,10 +248,10 @@ polyreg <- function(
     max(abs(new - old) / pmax(1, abs(old)))
   }
 
-  is_stalled <- function(x, stall_patience=3, stall_eps=1e-3) {
+  is_stalled <- function(x, stall_patience=3, eps=1e-3) {
     if (length(x) < stall_patience) return(FALSE)
     recent <- tail(x, stall_patience)
-    (diff(range(recent)) / max(1e-12, mean(recent))) <= stall_eps
+    (diff(range(recent)) / max(1e-12, mean(recent))) <= eps
   }
 
   choose_estimating_equation <- function(outcome.type, obj) {
@@ -268,12 +269,12 @@ polyreg <- function(
   }
 
   choose_nleqslv_method <- function(nleqslv.method) {
-    if (nleqslv.method %in% c("nleqslv", "Broyden")) {
+    if (nleqslv.method == "nleqslv" || nleqslv.method == "Broyden") {
       "Broyden"
     } else if (nleqslv.method == "Newton") {
       "Newton"
     } else {
-      stop("Unsupported nleqslv.method without optim(): ", nleqslv.method)
+      stop("Unsupported nleqslv.method: ", nleqslv.method)
     }
   }
 
@@ -360,7 +361,7 @@ polyreg <- function(
     }
     if (should.normalize.covariate) {
       adj <- 1 / as.vector(out_normalizeCovariate$range)
-      if (length(adj) != length(current_params))stop("Length of adj (range) must match length of current_params.")
+      if (length(adj) != length(current_params)) stop("Length of adj (range) must match length of current_params.")
       alpha_beta_estimated <- adj * current_params
       adj_matrix <- diag(adj, length(adj))
       cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
@@ -450,7 +451,7 @@ polyreg <- function(
   #######################################################################################################
   # 7. Output (functions: reportSurvival, reportCOMPETING-RISK, reportPrediction)
   #######################################################################################################
-  if (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL") {
+  if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
     out_summary <- reportConstantEffects(
       nuisance.model, exposure, estimand, out_bootstrap, out_getResults, iteration, max.absolute.difference, out_nleqslv, optim.method$nleqslv.method
     )

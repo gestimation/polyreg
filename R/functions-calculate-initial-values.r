@@ -10,28 +10,14 @@ getInitialValues <- function(formula, data, outcome.type, exposure, estimand,
   Y <- model.extract(mf, "response")
 
   if (!inherits(Y, c("Event", "Surv"))) {
-    if (outcome.type %in% c("COMPETINGRISK", "SURVIVAL", "PROPORTIONAL", "POLY-PROPORTIONAL")) {
-      stop("Expected a 'Surv' or 'Event' object for the specified outcome.type.")
-    } else {
-      t <- rep(0, length(Y))
-      epsilon <- Y
-      if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring))) {
-        stop("Invalid event codes (need 0/1).")
-      }
+    t <- rep(0, length(Y))
+    epsilon <- Y
+    if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring))) {
+      stop("BINOMIAL requires event codes {censoring,event1}.")
     }
   } else {
     t <- as.numeric(Y[, 1])
-    if (any(t < 0)) stop("Invalid time variable (negative values).")
-    if (any(is.na(t))) stop("Time variable contains NA.")
-    if (any(is.na(Y[, 2]))) stop("Event variable contains NA.")
-    epsilon <- Y[, 2]
-    if (outcome.type == "SURVIVAL") {
-      if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring)))
-        stop("SURVIVAL requires event codes {censoring,event1}.")
-    } else {
-      if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring)))
-        stop("COMPETINGRISK requires event codes {censoring,event1,event2}.")
-    }
+    epsilon <- as.numeric(Y[, 2])
   }
 
   if (!is.null(attributes(Terms)$specials$offset)) {

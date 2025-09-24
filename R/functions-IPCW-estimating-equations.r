@@ -37,16 +37,10 @@ estimating_equation_ipcw <- function(
   y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
   y_2_ <- ifelse(epsilon == estimand$code.event2, 1, 0)
 
-  a_ <- as.factor(data[[exposure]])
-  if (estimand$code.exposure.ref==0) {
-    x_a <- as.matrix(model.matrix(~ a_)[, -1])
-  } else {
-    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
-  }
+  out_defineExposureDesign <- defineExposureDesign(data, exposure, estimand$code.exposure.ref)
+  x_a <- out_defineExposureDesign$x_a
   x_l <- model.matrix(out_terms, mf)
   x_la <- cbind(x_l, x_a)
-#  i_parameter <- rep(NA, 7)
-#  i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
   potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
   ey <- calculateEY(potential.CIFs, x_a)
@@ -135,7 +129,7 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   censoring_dna	<- calculateNelsonAalen(t,y_0_)
   censoring_martingale <- diag(y_0_) - (outer(t, t, ">") * censoring_dna)
   censoring_km <- calculateKaplanMeier(t, y_0_)
-  censoring_km[censoring_km == 0] <- 1e-5
+  censoring_km[censoring_km == 0] <- prob.bound
   censoring_mkm <- censoring_martingale / censoring_km
   y_12 <- (y_1 + y_2 > 0)
   survival_km <- calculateKaplanMeier(t, y_12)
@@ -271,19 +265,15 @@ estimating_equation_survival <- function(
   y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
   y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
 
-  a_ <- as.factor(data[[exposure]])
-  if (estimand$code.exposure.ref==0) {
-    x_a <- as.matrix(model.matrix(~ a_)[, -1])
-  } else {
-    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
-  }
+  out_defineExposureDesign <- defineExposureDesign(data, exposure, estimand$code.exposure.ref)
+  x_a <- out_defineExposureDesign$x_a
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
 
   potential.CIFs <- calculatePotentialRisk(alpha_beta, x_a, x_l, offset, estimand)
   one <- rep(1, nrow(x_l))
   a <- as.vector(x_a)
-  ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
+  ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a) #曝露分類未対応
   w11 <- 1 / (ey_1 * (1 - ey_1))
   wy_1 <- ip.weight * y_1
   wy_1ey_1 <- w11*(wy_1 - ey_1)
@@ -368,11 +358,11 @@ calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
 
   calculateA <- function(effect_measure, exposed.CIFs, unexposed.CIFs, a) {
-    if (effect_measure == 'RR') {
+    if (effect_measure == "RR") {
       return(a * (1 / exposed.CIFs) + (1 - a) * (1 / unexposed.CIFs))
-    } else if (effect_measure == 'OR') {
+    } else if (effect_measure == "OR") {
       return(a * (1 / exposed.CIFs + 1 / (1 - exposed.CIFs)) + (1 - a) * (1 / unexposed.CIFs + 1 / (1 - unexposed.CIFs)))
-    } else if (effect_measure == 'SHR') {
+    } else if (effect_measure == "SHR") {
       tmp1_exposed <- -1 / (1 - exposed.CIFs)
       tmp1_unexposed <- -1 / (1 - unexposed.CIFs)
       tmp2_exposed <- log(1 - exposed.CIFs)
@@ -440,12 +430,8 @@ estimating_equation_proportional <- function(
   y_0_ <- ifelse(epsilon == estimand$code.censoring, 1, 0)
   y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
 
-  a_ <- as.factor(data[[exposure]])
-  if (estimand$code.exposure.ref==0) {
-    x_a <- as.matrix(model.matrix(~ a_)[, -1])
-  } else {
-    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
-  }
+  out_defineExposureDesign <- defineExposureDesign(data, exposure, estimand$code.exposure.ref)
+  x_a <- out_defineExposureDesign$x_a
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   index.vector <- estimand$index.vector
@@ -467,9 +453,7 @@ estimating_equation_proportional <- function(
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
     potential.CIFs <- calculatePotentialRisk(alpha_beta, x_a, x_l, offset, estimand)
-    one <- rep(1, nrow(x_l))
-    a <- as.vector(x_a)
-    ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
+    ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a) #曝露分類未対応
     w11 <- 1 / (ey_1 * (1 - ey_1))
 #    wy_1 <- ip.weight * y_1
     wy_1 <- ip.weight.matrix[,i_time] * y_1
@@ -551,12 +535,8 @@ estimating_equation_pproportional <- function(
   y_1_ <- ifelse(epsilon == estimand$code.event1, 1, 0)
   y_2_ <- ifelse(epsilon == estimand$code.event2, 1, 0)
 
-  a_ <- as.factor(data[[exposure]])
-  if (estimand$code.exposure.ref==0) {
-    x_a <- as.matrix(model.matrix(~ a_)[, -1])
-  } else {
-    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
-  }
+  out_defineExposureDesign <- defineExposureDesign(data, exposure, estimand$code.exposure.ref)
+  x_a <- out_defineExposureDesign$x_a
   x_l <- model.matrix(Terms, mf)
   x_la <- cbind(x_l, x_a)
   index.vector <- estimand$index.vector
@@ -569,7 +549,7 @@ estimating_equation_pproportional <- function(
   #n_para_6 <- length(time.point)*(n_para_5-2) + 2
 
   one <- rep(1, nrow(x_l))
-  a <- as.vector(x_a)
+#  a <- as.vector(x_a)
   score_beta <- NULL
   score_alpha1 <- 0
   score_alpha2 <- 0
