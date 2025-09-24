@@ -1,4 +1,7 @@
-getInitialValues <- function(formula, data, outcome.type, exposure, estimand, specific.time, data.initial.values, prob.bound) {
+getInitialValues <- function(formula, data, outcome.type, exposure, estimand,
+                             specific.time, data.initial.values = NULL, prob.bound = 1e-8) {
+
+  ## ---------- 1) モデル枠の構築と基本チェック ----------
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
   special <- c("strata", "cluster", "offset")
@@ -10,271 +13,148 @@ getInitialValues <- function(formula, data, outcome.type, exposure, estimand, sp
 
   if (!inherits(Y, c("Event", "Surv"))) {
     if (outcome.type %in% c('COMPETINGRISK', 'SURVIVAL', 'PROPORTIONAL', 'POLY-PROPORTIONAL')) {
-      stop("Expected a 'Surv' or 'Event'-object when outcome.type is COMPETINGRISK, SURVIVAL, PROPORTIONAL or POLY-PROPORTIONAL. ")
+      stop("Expected a 'Surv' or 'Event' object for the specified outcome.type.")
     } else {
       t <- rep(0, length(Y))
       epsilon <- Y
       if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring))) {
-        stop("Invalid event codes. Must be 0 or 1, if event codes are not specified. ")
+        stop("Invalid event codes (need 0/1).")
       }
     }
   } else {
     t <- as.numeric(Y[, 1])
-    if (any(t<0))
-      stop("Invalid time variable. Expected non-negative values. ")
-    if (any(is.na(t)))
-      stop("Time variable contains NA values")
-    if (any(is.na(Y[, 2]))) {
-      stop("Event variable contains NA values")
+    if (any(t < 0)) stop("Invalid time variable (negative values).")
+    if (any(is.na(t))) stop("Time variable contains NA.")
+    if (any(is.na(Y[, 2]))) stop("Event variable contains NA.")
+    epsilon <- Y[, 2]
+    if (outcome.type == 'SURVIVAL') {
+      if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring)))
+        stop("SURVIVAL requires event codes {censoring,event1}.")
     } else {
-      epsilon <- Y[, 2]
-    }
-    if (!all(epsilon %in% c(estimand$code.event1, estimand$code.censoring)) & (outcome.type == 'SURVIVAL')) {
-      stop("Invalid event codes. Must be 0 or 1, with 0 representing censoring, if event codes are not specified. ")
-    } else if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring))) {
-      stop("Invalid event codes. Must be 0, 1 or 2, with 0 representing censoring, if event codes are not specified. ")
+      if (!all(epsilon %in% c(estimand$code.event1, estimand$code.event2, estimand$code.censoring)))
+        stop("COMPETINGRISK requires event codes {censoring,event1,event2}.")
     }
   }
-  if (!is.null(offsetpos <- attributes(Terms)$specials$offset)) {
+
+  ## ---------- 2) offset と x_l（共変量デザイン） ----------
+  if (!is.null(attributes(Terms)$specials$offset)) {
     ts <- survival::untangle.specials(Terms, "offset")
     if (length(ts$vars) > 0) {
-      Terms <- Terms[-ts$terms]
+      Terms2 <- Terms[-ts$terms]             # offset を式から除去
       offset <- mf[[ts$vars]]
+      x_l <- model.matrix(Terms2, mf)        # 切片列は含まれる（デフォルト）
     } else {
       offset <- rep(0, nrow(mf))
+      x_l <- model.matrix(Terms, mf)
     }
   } else {
     offset <- rep(0, nrow(mf))
-  }
-
-  a_ <- as.factor(data[[exposure]])
-  if (estimand$code.exposure.ref==0) {
-    x_a <- as.matrix(model.matrix(~ a_)[, -1])
-  } else {
-    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
-  }
-  a <- as.vector(x_a)
-  x_l <- model.matrix(Terms, mf)
-  n_para_1 <- ncol(x_l)
-  if (any(is.na(data[[exposure]])))
-    stop("Exposure variable contains NA values")
-  if (any(is.na(x_l)))
-    stop("Covariates contain NA values")
-
-  if (!is.null(data.initial.values)) {
     x_l <- model.matrix(Terms, mf)
-    if (!(1+ncol(x_l))*2 == length(data.initial.values))
-      stop("Invalid initial value dataset. Must contain the same number of initial values as parameters")
+  }
+  if (any(is.na(x_l))) stop("Covariate design (x_l) contains NA.")
+
+  ## ---------- 3) x_a（曝露デザインの多値対応） ----------
+  if (any(is.na(data[[exposure]]))) stop("Exposure variable contains NA.")
+  a_raw <- data[[exposure]]
+
+  build_x_a <- function(a_vec, ref_code) {
+    if (is.factor(a_vec) || is.character(a_vec)) {
+      a_fac <- as.factor(a_vec)
+      M <- model.matrix(~ a_fac)           # 切片 + ダミー
+      Xa <- M[, -1, drop = FALSE]          # 基準水準を除外（K-1 列）
+      if (!is.null(ref_code) && ref_code != 0) {
+        # ref の扱いを簡易に切り替えたい場合の軽実装
+        Xa <- 1 - Xa
+      }
+      colnames(Xa) <- sub("^a_fac", exposure, colnames(Xa))
+      Xa
+    } else if (is.numeric(a_vec)) {
+      # 数値はそのまま 1 列（連続曝露も想定）
+      Xa <- as.matrix(a_vec)
+      colnames(Xa) <- exposure
+      Xa
+    } else {
+      stop("Unsupported exposure type. Use factor/character/numeric.")
+    }
+  }
+
+  x_a <- build_x_a(a_raw, estimand$code.exposure.ref)
+  if (ncol(x_a) == 0) stop("Exposure design x_a has zero columns.")
+
+  p_l <- ncol(x_l)
+  p_a <- ncol(x_a)
+
+  ## ---------- 4) 既定の初期値（手入力）があればそのまま返す ----------
+  if (!is.null(data.initial.values)) {
+    expected_len <- if (outcome.type == 'SURVIVAL' ||
+                        all(epsilon %in% c(estimand$code.event1, estimand$code.censoring))) {
+      p_l + p_a
+    } else {
+      2 * (p_l + p_a)
+    }
+    if (length(data.initial.values) != expected_len) {
+      stop(sprintf("Invalid initial values length: expected %d, got %d.",
+                   expected_len, length(data.initial.values)))
+    }
     return(data.initial.values)
   }
 
-  binarizeIfContinuous <- function(x) {
-    if (outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') {
-      if (is.numeric(x) & length(unique(x)) > 2) {
-        l <- as.numeric((x >= median(x)) == TRUE)
-        out <- calculateInitialValuesSurvival(t, epsilon, a, l, estimand, specific.time, prob.bound)
-        return(out)
-      } else if (length(unique(x)) == 2) {
-        l <- x
-        out <- calculateInitialValuesSurvival(t, epsilon, a, l, estimand, specific.time, prob.bound)
-        return(out)
-      }
+  ## ---------- 5) 効果指標→リンク関数 ----------
+  link_from_measure <- function(measure) {
+    switch(toupper(measure),
+           "RR"  = "log",
+           "OR"  = "logit",
+           "SHR" = "cloglog",
+           stop("effect.measure must be RR, OR, or SHR"))
+  }
+
+  ## ---------- 6) GLM で初期値を作る小関数 ----------
+  fit_init <- function(y01, x_l, x_a, link, offset = NULL, pb = 1e-8) {
+    # 分離対策：y を [pb, 1-pb] にスムージング
+    y_tilde <- as.numeric(y01)
+    y_tilde <- y_tilde * (1 - 2 * pb) + pb
+
+    X <- cbind(x_l, x_a)
+    df <- data.frame(y = y_tilde, X)
+    fam <- binomial(link = link)
+
+    fit <- suppressWarnings(
+      try(glm(y ~ . - 1, data = df,
+              family = fam,
+              weights = rep(1, nrow(df)),
+              offset = offset),
+          silent = TRUE)
+    )
+
+    if (inherits(fit, "try-error")) {
+      co <- rep(0, ncol(X))                 # フォールバック：全部0
+      names(co) <- colnames(X)
     } else {
-      if (is.numeric(x) & length(unique(x)) > 2) {
-        l <- as.numeric((x >= median(x)) == TRUE)
-        out <- calculateInitialValuesCompetingRisk(t, epsilon, a, l, estimand, specific.time, prob.bound)
-        return(out)
-      } else if (length(unique(x)) == 2) {
-        l <- x
-        out <- calculateInitialValuesCompetingRisk(t, epsilon, a, l, estimand, specific.time, prob.bound)
-        return(out)
-      }
+      co <- coef(fit)
+      co[is.na(co)] <- 0
     }
+    list(alpha = unname(co[seq_len(p_l)]),
+         beta  = unname(co[p_l + seq_len(p_a)]))
   }
 
-  if (all(epsilon %in% c(estimand$code.event1, estimand$code.censoring))) {
-    if (n_para_1>1) {
-      out_bic_1 <- t(binarizeIfContinuous(x_l[,2])[1,1:2])
-      if (n_para_1>2) {
-        for (i_para in 3:n_para_1) {
-          out_bic_i <- binarizeIfContinuous(x_l[,i_para])
-          out_bic_1 <- cbind(out_bic_1, t(out_bic_i[1,2]))
-        }
-        out_bic_1 <- cbind(out_bic_1, t(out_bic_i[1,3]))
-      } else {
-        out_bic_1 <- cbind(out_bic_1, t(binarizeIfContinuous(x_l[,2])[1,3]))
-      }
-      init_vals <- out_bic_1
-    } else {
-      l <- NULL
-      init_vals <- calculateInitialValuesSurvival(t, epsilon, a, l, estimand, specific.time, prob.bound)
-    }
+  ## ---------- 7) 目的変数（時点まで発生）と推定 ----------
+  y1 <- as.integer(epsilon == estimand$code.event1 & t <= specific.time)
+
+  if (outcome.type == 'SURVIVAL' ||
+      all(epsilon %in% c(estimand$code.event1, estimand$code.censoring))) {
+    link1 <- link_from_measure(estimand$effect.measure1)
+    est1  <- fit_init(y1, x_l, x_a, link1, offset = offset, pb = prob.bound)
+    return(c(est1$alpha, est1$beta))
   } else {
-    if (n_para_1>1) {
-      out_bic_1 <- t(binarizeIfContinuous(x_l[,2])[1,1:2])
-      out_bic_2 <- t(binarizeIfContinuous(x_l[,2])[1,4:5])
-      if (n_para_1>2) {
-        for (i_para in 3:n_para_1) {
-          out_bic_i <- binarizeIfContinuous(x_l[,i_para])
-          out_bic_1 <- cbind(out_bic_1, t(out_bic_i[1,2]))
-          out_bic_2 <- cbind(out_bic_2, t(out_bic_i[1,5]))
-        }
-        out_bic_1 <- cbind(out_bic_1, t(out_bic_i[1,3]))
-        out_bic_2 <- cbind(out_bic_2, t(out_bic_i[1,6]))
-      } else {
-        out_bic_1 <- cbind(out_bic_1, t(binarizeIfContinuous(x_l[,2])[1,3]))
-        out_bic_2 <- cbind(out_bic_2, t(binarizeIfContinuous(x_l[,2])[1,6]))
-      }
-      init_vals <- cbind(out_bic_1, out_bic_2)
-    } else {
-      l <- NULL
-      init_vals <- calculateInitialValuesCompetingRisk(t, epsilon, a, l, estimand, specific.time, prob.bound)
-    }
-  }
-  return(init_vals)
-}
+    # 競合リスク：イベント2も別途フィット
+    y2    <- as.integer(epsilon == estimand$code.event2 & t <= specific.time)
+    link1 <- link_from_measure(estimand$effect.measure1)
+    link2 <- link_from_measure(estimand$effect.measure2)
 
-calculateInitialValuesCompetingRisk <- function(t, epsilon, a, l = NULL, estimand, specific.time, prob.bound) {
-  epsilon0 <- epsilon[a == 0]
-  epsilon1 <- epsilon[a == 1]
-  t0 <- t[a == 0]
-  t1 <- t[a == 1]
+    est1  <- fit_init(y1, x_l, x_a, link1, offset = offset, pb = prob.bound)
+    est2  <- fit_init(y2, x_l, x_a, link2, offset = offset, pb = prob.bound)
 
-  p_10 <- (sum(epsilon0 == estimand$code.event1 & t0 <= specific.time) / length(epsilon0)) + prob.bound
-  p_20 <- (sum(epsilon0 == estimand$code.event2 & t0 <= specific.time) / length(epsilon0)) + prob.bound
-  p_00 <- 1 - p_10 - p_20
-  p_11 <- (sum(epsilon1 == estimand$code.event1 & t1 <= specific.time) / length(epsilon1)) + prob.bound
-  p_21 <- (sum(epsilon1 == estimand$code.event2 & t1 <= specific.time) / length(epsilon1)) + prob.bound
-  p_01 <- 1 - p_11 - p_21
-
-  alpha_1 <- log((p_10 * p_11) / (p_00 * p_01))
-  alpha_2 <- log((p_20 * p_21) / (p_00 * p_01))
-  if(!is.null(l)){
-    epsilon00 <- epsilon[a == 0 & l == 0]
-    epsilon10 <- epsilon[a == 1 & l == 0]
-    epsilon01 <- epsilon[a == 0 & l == 1]
-    epsilon11 <- epsilon[a == 1 & l == 1]
-    t00 <- t[a == 0 & l == 0]
-    t10 <- t[a == 1 & l == 0]
-    t01 <- t[a == 0 & l == 1]
-    t11 <- t[a == 1 & l == 1]
-
-    p_100 <- (sum(epsilon00 == estimand$code.event1 & t00 <= specific.time) / length(epsilon00)) + prob.bound
-    p_200 <- (sum(epsilon00 == estimand$code.event2 & t00 <= specific.time) / length(epsilon00)) + prob.bound
-    p_000 <- 1 - p_100 - p_200
-    p_110 <- (sum(epsilon10 == estimand$code.event1 & t10 <= specific.time) / length(epsilon10)) + prob.bound
-    p_210 <- (sum(epsilon10 == estimand$code.event2 & t10 <= specific.time) / length(epsilon10)) + prob.bound
-    p_010 <- 1 - p_110 - p_210
-    p_101 <- (sum(epsilon01 == estimand$code.event1 & t01 <= specific.time) / length(epsilon01)) + prob.bound
-    p_201 <- (sum(epsilon01 == estimand$code.event2 & t01 <= specific.time) / length(epsilon01)) + prob.bound
-    p_001 <- 1 - p_101 - p_201
-    p_111 <- (sum(epsilon11 == estimand$code.event1 & t11 <= specific.time) / length(epsilon11)) + prob.bound
-    p_211 <- (sum(epsilon11 == estimand$code.event2 & t11 <= specific.time) / length(epsilon11)) + prob.bound
-    p_011 <- 1 - p_111 - p_211
-
-    alpha_10 <- log((p_100 * p_110) / (p_000 * p_010))
-    alpha_20 <- log((p_200 * p_210) / (p_000 * p_010))
-    alpha_11 <- log((p_101 * p_111) / (p_000 * p_011)) - alpha_10
-    alpha_21 <- log((p_201 * p_211) / (p_000 * p_011)) - alpha_20
-  }
-
-  if (estimand$effect.measure1 == 'RR') {
-    beta_1 <- log(p_11 / p_10)
-  } else if (estimand$effect.measure1 == 'OR') {
-    beta_1 <- log((p_11 / (1 - p_11)) / (p_10 / (1 - p_10)))
-  } else if (estimand$effect.measure1 == 'SHR') {
-    beta_1 <- log(log(1 - p_11) / log(1 - p_10))
-  } else {
-    stop("Invalid effect measure code. Must be RR, OR or SHR.")
-  }
-
-  if (estimand$effect.measure2 == 'RR') {
-    beta_2 <- log(p_21 / p_20)
-  } else if (estimand$effect.measure2 == 'OR') {
-    beta_2 <- log((p_21 / (1 - p_21)) / (p_20 / (1 - p_20)))
-  } else if (estimand$effect.measure2 == 'SHR') {
-    beta_2 <- log(log(1 - p_21) / log(1 - p_20))
-  } else {
-    stop("Invalid effect measure code. Must be RR, OR or SHR.")
-  }
-
-  alpha_beta <- if (is.null(l)) {
-    cbind(alpha_1, beta_1, alpha_2, beta_2)
-  } else {
-    cbind(alpha_10, alpha_11, beta_1, alpha_20, alpha_21, beta_2)
-  }
-  return(alpha_beta)
-}
-
-calculateInitialValuesSurvival <- function(t, epsilon, a, l = NULL, estimand, specific.time, prob.bound) {
-  if (is.null(l)) {
-    epsilon0 <- epsilon[a == 0]
-    epsilon1 <- epsilon[a == 1]
-    t0 <- t[a == 0]
-    t1 <- t[a == 1]
-    p_10 <- (sum(epsilon0 == estimand$code.event1 & t0 <= specific.time) / length(epsilon0)) + prob.bound
-    p_00 <- 1 - p_10
-    p_11 <- (sum(epsilon1 == estimand$code.event1 & t1 <= specific.time) / length(epsilon1)) + prob.bound
-    p_01 <- 1 - p_11
-
-    if (estimand$effect.measure1 == 'RR') {
-      beta_1 <- log(p_11 / p_10)
-    } else if (estimand$effect.measure1 == 'OR') {
-      beta_1 <- log((p_11 / (1 - p_11)) / (p_10 / (1 - p_10)))
-    } else if (estimand$effect.measure1 == 'SHR') {
-      beta_1 <- log(log(1 - p_11) / log(1 - p_10))
-    } else {
-      stop("Invalid effect measure code. Must be RR, OR or SHR.")
-    }
-
-    alpha_1 <- log((p_10 * p_11) / (p_00 * p_01))
-    return(cbind(alpha_1, beta_1))
-  } else {
-    epsilon00 <- epsilon[a == 0 & l == 0]
-    epsilon10 <- epsilon[a == 1 & l == 0]
-    epsilon01 <- epsilon[a == 0 & l == 1]
-    epsilon11 <- epsilon[a == 1 & l == 1]
-    t00 <- t[a == 0 & l == 0]
-    t10 <- t[a == 1 & l == 0]
-    t01 <- t[a == 0 & l == 1]
-    t11 <- t[a == 1 & l == 1]
-
-    p_100 <- (sum(epsilon00 == estimand$code.event1 & t00 <= specific.time) / length(epsilon00)) + prob.bound
-    p_000 <- 1 - p_100
-    p_110 <- (sum(epsilon10 == estimand$code.event1 & t10 <= specific.time) / length(epsilon10)) + prob.bound
-    p_010 <- 1 - p_110
-    p_101 <- (sum(epsilon01 == estimand$code.event1 & t01 <= specific.time) / length(epsilon01)) + prob.bound
-    p_001 <- 1 - p_101
-    p_111 <- (sum(epsilon11 == estimand$code.event1 & t11 <= specific.time) / length(epsilon11)) + prob.bound
-    p_011 <- 1 - p_111
-
-    if (any(c(p_100, p_000, p_110, p_010, p_101, p_001, p_111, p_011) == 0, na.rm = TRUE)) {
-      stop("Complete separation detected in initial value search")
-    }
-
-    alpha_10 <- log((p_100 * p_110) / (p_000 * p_010))
-    alpha_11 <- log((p_101 * p_111) / (p_000 * p_011)) - alpha_10
-
-    epsilon0 <- epsilon[a == 0]
-    epsilon1 <- epsilon[a == 1]
-    t0 <- t[a == 0]
-    t1 <- t[a == 1]
-    p_10 <- (sum(epsilon0 == estimand$code.event1 & t0 <= specific.time) / length(epsilon0)) + prob.bound
-    p_00 <- 1 - p_10
-    p_11 <- (sum(epsilon1 == estimand$code.event1 & t1 <= specific.time) / length(epsilon1)) + prob.bound
-    p_01 <- 1 - p_11
-
-    if (estimand$effect.measure1 == 'RR') {
-      beta_1 <- log(p_11 / p_10)
-    } else if (estimand$effect.measure1 == 'OR') {
-      beta_1 <- log((p_11 / (1 - p_11)) / (p_10 / (1 - p_10)))
-    } else if (estimand$effect.measure1 == 'SHR') {
-      beta_1 <- log(log(1 - p_11) / log(1 - p_10))
-    } else {
-      stop("Invalid effect measure code. Must be RR, OR or SHR.")
-    }
-
-    return(cbind(alpha_10, alpha_11, beta_1))
+    return(c(est1$alpha, est1$beta, est2$alpha, est2$beta))
   }
 }
 

@@ -1,25 +1,23 @@
-residuals_CIFs <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
+residuals_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
   K <- estimand$exposure.levels
-  clogp <- clampLogP(as.numeric(log_p))
-  if (length(alpha1) != K-1 || length(alpha2) != K-1) stop("alpha1 and alpha2 must have length K-1.")
-  if (length(clogp) != 2*K || length(clogp) %% 2 != 0) stop("log_p length must be even (2K).")
+  clog_CIFs <- clampLogP(as.numeric(log_CIFs))
+  if (length(clog_CIFs) != 2*K || length(clog_CIFs) %% 2 != 0) stop("log_CIFs length must be even (2K).")
 
   i1 <- 1:K                      # indices for event1 block
   i2 <- (K+1):(2*K)              # indices for event2 block
-  p1 <- exp(clogp[i1])
-  p2 <- exp(clogp[i2])
-
-  rem <- pmax(1 - p1 - p2, prob.bound)
-  lrem <- log(rem)
+  p1 <- exp(clog_CIFs[i1])
+  p2 <- exp(clog_CIFs[i2])
+  p0 <- pmax(1 - p1 - p2, prob.bound)
+  logp0 <- log(p0)
 
   r <- numeric(2*K)
-  r[1] <- alpha1 - clogp[i1[1]] - clogp[i1[2]] + lrem[1] + lrem[2]
-  r[K] <- alpha2 - clogp[i2[1]] - clogp[i2[2]] + lrem[1] + lrem[2]
+  r[1] <- alpha1 - clog_CIFs[i1[1]] - clog_CIFs[i1[2]] + logp0[1] + logp0[2]
+  r[K] <- alpha2 - clog_CIFs[i2[1]] - clog_CIFs[i2[2]] + logp0[1] + logp0[2]
 #  for (k in 2:K) {
 #    r[k - 1] <- alpha1[k - 1] - clogp[i1[1]] - clogp[i1[k]] + lrem[1] + lrem[k]
 #    r[(K - 1) + (k - 1)] <- alpha2[k - 1] - clogp[i2[1]] - clogp[i2[k]] + lrem[1] + lrem[k]
 #  }
-  agg_res <- function(effect.measure, pref, pL, clogpref, clogpL, beta) {
+  calculateResidualBeta <- function(effect.measure, pref, pL, clogpref, clogpL, beta) {
     if (effect.measure == "RR") {
       sum(beta - clogpL + clogpref)
     } else if (effect.measure == "OR") {
@@ -30,20 +28,22 @@ residuals_CIFs <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.b
       sum(exp(beta) - (Bj / Bi))
     } else stop("effect.measure must be RR, OR, or SHR.")
   }
-  r[2*K - 1] <- agg_res(estimand$effect.measure1, p1[1], p1[2:K], clogp[i1[1]], clogp[i1[2:K]], beta1)
-  r[2*K]     <- agg_res(estimand$effect.measure2, p2[1], p2[2:K], clogp[i2[1]], clogp[i2[2:K]], beta2)
+  r[2*K - 1] <- calculateResidualBeta(estimand$effect.measure1, p1[1], p1[2:K], clog_CIFs[i1[1]], clog_CIFs[i1[2:K]], beta1)
+  r[2*K]     <- calculateResidualBeta(estimand$effect.measure2, p2[1], p2[2:K], clog_CIFs[i2[1]], clog_CIFs[i2[2:K]], beta2)
   return(r)
 }
 
-jacobian_CIFs <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
+jacobian_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
   K <- estimand$exposure.levels
-  clogp <- clampLogP(as.numeric(log_p))
-  i1 <- 1:K; i2 <- (K+1):(2*K)
-  p1 <- exp(clogp[i1]); p2 <- exp(clogp[i2])
-  rem <- pmax(1 - p1 - p2, prob.bound)
+  clog_CIFs <- clampLogP(as.numeric(log_CIFs))
+  i1 <- 1:K
+  i2 <- (K+1):(2*K)
+  p1 <- exp(log_CIFs[i1])
+  p2 <- exp(log_CIFs[i2])
+  p0 <- pmax(1 - p1 - p2, prob.bound)
 
-  dlogrem_dlp1 <- -p1/rem
-  dlogrem_dlp2 <- -p2/rem
+  dlogrem_dlp1 <- -p1/p0
+  dlogrem_dlp2 <- -p2/p0
 
   J <- matrix(0.0, nrow = 2*K, ncol = 2*K)
   for (k in 2:K) {
@@ -60,7 +60,7 @@ jacobian_CIFs <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bo
     J[r2,   i1[k]] <-      dlogrem_dlp1[k]
   }
 
-  effect_grad_row <- function(effect.measure, pref, pL, idx_ref, idx_L, K) {
+  calculateGradient <- function(effect.measure, pref, pL, idx_ref, idx_L, K) {
     g <- numeric(2*K)
     if (effect.measure == "RR") {
       g[idx_ref] <- g[idx_ref] + (K - 1)
@@ -84,15 +84,16 @@ jacobian_CIFs <- function(log_p, alpha1, beta1, alpha2, beta2, estimand, prob.bo
   }
   row_e1 <- 2*K - 1
   row_e2 <- 2*K
-  g1 <- effect_grad_row(estimand$effect.measure1, pref = p1[1], pL = p1[2:K], idx_ref = i1[1], idx_L = i1[2:K], K = K)
-  g2 <- effect_grad_row(estimand$effect.measure2, pref = p2[1], pL = p2[2:K], idx_ref = i2[1], idx_L = i2[2:K], K = K)
+  g1 <- calculateGradient(estimand$effect.measure1, pref = p1[1], pL = p1[2:K], idx_ref = i1[1], idx_L = i1[2:K], K = K)
+  g2 <- calculateGradient(estimand$effect.measure2, pref = p2[1], pL = p2[2:K], idx_ref = i2[1], idx_L = i2[2:K], K = K)
   J[row_e1, ] <- J[row_e1, ] + g1
   J[row_e2, ] <- J[row_e2, ] + g2
   return(J)
 }
 
 LevenbergMarquardt <- function(start,
-                               res_fun, jac_fun,
+                               res_fun,
+                               jac_fun,
                                maxit = 30,
                                ftol  = 1e-10,
                                ptol  = 1e-10,
@@ -167,7 +168,6 @@ LevenbergMarquardt <- function(start,
         }
       }
     }
-
     J <- jac_fun(lp)
     g <- drop(crossprod(J, r))
 
@@ -216,22 +216,20 @@ callLevenbergMarquardt <- function(log_CIFs0, alpha1, beta1, alpha2, beta2, opti
 calculatePotentialCIFs <- function(alpha_beta_tmp, x_a, x_l, offset, epsilon, estimand, optim.method, prob.bound, initial.CIFs = NULL) {
   K <- estimand$exposure.levels
   n  <- length(epsilon)
+  index.vector <- estimand$index.vector
 
-  i_parameter <- rep(NA_integer_, 7L)
-  i_parameter <- calculateIndexForParameter(i_parameter, x_l, x_a)
-  alpha_1    <- alpha_beta_tmp[seq_len(i_parameter[1])]
-  beta_tmp_1 <- alpha_beta_tmp[seq.int(i_parameter[2], i_parameter[3])]
-  alpha_2    <- alpha_beta_tmp[seq.int(i_parameter[4], i_parameter[5])]
-  beta_tmp_2 <- alpha_beta_tmp[seq.int(i_parameter[6], i_parameter[7])]
+  alpha_1    <- alpha_beta_tmp[seq_len(index.vector[1])]
+  beta_tmp_1 <- alpha_beta_tmp[seq.int(index.vector[2], index.vector[3])]
+  alpha_2    <- alpha_beta_tmp[seq.int(index.vector[4], index.vector[5])]
+  beta_tmp_2 <- alpha_beta_tmp[seq.int(index.vector[6], index.vector[7])]
   alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
   alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
 
-  p0 <- c(
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound,
-    sum(epsilon == estimand$code.event1) / n + prob.bound,
-    sum(epsilon == estimand$code.event2) / n + prob.bound
-  )
+  tmp1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
+  CIF1 <- rep(tmp1, K)
+  tmp2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
+  CIF2 <- rep(tmp2, K)
+  p0 <- c(CIF1,CIF2)
   p0     <- clampP(p0, prob.bound)
   log_p0 <- log(p0)
 
@@ -248,7 +246,6 @@ calculatePotentialCIFs <- function(alpha_beta_tmp, x_a, x_l, offset, epsilon, es
     } else {
       CIFs0 <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, seq_len(2*K), drop = FALSE]) else exp(log_p0)
       log_CIFs0 <- log(clampP(CIFs0, prob.bound))
-
       log_CIFs <- callLevenbergMarquardt(
         log_CIFs0  = log_CIFs0,
         alpha1    = alpha_tmp_1[i],

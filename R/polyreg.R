@@ -160,7 +160,6 @@ polyreg <- function(
       out_normalizeCovariate = out_normalizeCovariate
     )
   }
-  alpha_beta_0 <- rep(0, estimand$index.vector[8])
 
   #######################################################################################################
   # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
