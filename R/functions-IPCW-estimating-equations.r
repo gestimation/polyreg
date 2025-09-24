@@ -49,12 +49,9 @@ estimating_equation_ipcw <- function(
 #  i_parameter <- calculateIndexForParameter(NA,x_l,x_a)
 
   potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-  print(dim(potential.CIFs))
   ey <- calculateEY(potential.CIFs, x_a)
   ey_1 <- ey$ey_1
   ey_2 <- ey$ey_2
-  #ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
-  #ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
 
   v11 <- ey_1 * (1 - ey_1)
   v12 <- -ey_1 * ey_2
@@ -462,7 +459,7 @@ estimating_equation_proportional <- function(
   alpha_beta_i <- rep(NA, index.vector[7])
   for (specific.time in time.point) {
     i_time <- i_time + 1
-    i_para <- i_parameter[1]*(i_time-1)+1
+    i_para <- index.vector[1]*(i_time-1)+1
     alpha_beta_i[seq_len(index.vector[1])]                 <- alpha_beta[seq.int(i_para, i_para+index.vector[1]-1)]
     alpha_beta_i[seq.int(index.vector[2], index.vector[3])] <- alpha_beta[index.vector[8]/2]
 
@@ -584,7 +581,7 @@ estimating_equation_pproportional <- function(
     alpha_beta_i[seq_len(index.vector[1])]                 <- alpha_beta[seq.int(i_para, i_para+index.vector[1]-1)]
     alpha_beta_i[seq.int(index.vector[2], index.vector[3])] <- alpha_beta[index.vector[8]/2]
     alpha_beta_i[seq.int(index.vector[4], index.vector[5])] <- alpha_beta[seq.int((index.vector[8]/2+i_para),(index.vector[8]/2+i_para+index.vector[1]-1))]
-    alpha_beta_i[seq.int(i_parameter[6], i_parameter[7])] <- alpha_beta[i_parameter[8]]
+    alpha_beta_i[seq.int(index.vector[6], index.vector[7])] <- alpha_beta[index.vector[8]]
     #alpha_beta_i[1:n_para_1]        <- alpha_beta[i_para:(i_para+n_para_1-1)]
     #alpha_beta_i[n_para_2]          <- alpha_beta[n_para_6/2]
     #alpha_beta_i[n_para_3:n_para_4] <- alpha_beta[(n_para_6/2+i_para):(n_para_6/2+i_para+n_para_1-1)]
@@ -595,10 +592,9 @@ estimating_equation_pproportional <- function(
     y_2 <- ifelse(epsilon == 2 & t <= specific.time, 1, 0)
 
     potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    #ey_1 <- potential.CIFs[,3]*a + potential.CIFs[,1]*(one - a)
-    #ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,2]*(one - a)
-    ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
-    ey_2 <- potential.CIFs[,4]*a + potential.CIFs[,3]*(one - a)
+    ey <- calculateEY(potential.CIFs, x_a)
+    ey_1 <- ey$ey_1
+    ey_2 <- ey$ey_2
 
     v11 <- ey_1 * (1 - ey_1)
     v12 <- -ey_1 * ey_2

@@ -313,11 +313,11 @@ checkInput <- function(data, formula, exposure, code.event1, code.event2, code.c
     stop("offset() cannot appear in formula")
   if (!is.null(attr(out_terms, "specials")$cluster))
     stop("cluster() cannot appear in formula")
+  mf$formula <- out_terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
   if (outcome.type %in% c("COMPETING-RISK","SURVIVAL","POLY-PROPORTIONAL","POLY-PROPORTIONAL")) {
-    mf$formula <- out_terms
-    mf[[1]] <- as.name("model.frame")
-    mf <- eval(mf, parent.frame())
-    Y <- model.extract(mf, "response")
     if (!inherits(Y, c("Event", "Surv"))) {
       stop("Surv- or Event-object is expected")
     } else {
@@ -333,6 +333,7 @@ checkInput <- function(data, formula, exposure, code.event1, code.event2, code.c
   } else {
     x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
   }
+
   exposure.levels <- ncol(x_a)+1
   x_l <- model.matrix(out_terms, mf)
   index.vector <- rep(NA, 7)
@@ -436,3 +437,52 @@ append_trace <- function(trace_df, iteration, computation.time.second = NA_real_
   if (is.null(trace_df)) return(row)
   rbind(trace_df, row)
 }
+
+defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefix = "a") {
+  stopifnot(is.data.frame(data))
+  if (!exposure %in% names(data)) {
+    stop("exposure = '", exposure, "' is not found in data.")
+  }
+
+  # 1) Convert to factor
+  a_raw <- data[[exposure]]
+  a_ <- factor(a_raw)
+  a_ <- base::droplevels(a_)
+  lev <- levels(a_)
+  K <- length(lev)
+
+  # 2) Handle reference category
+  ref_lab <- NULL
+  if (!is.null(code.exposure.ref)) {
+    ref_lab <- if (is.numeric(code.exposure.ref)) as.character(code.exposure.ref) else code.exposure.ref
+    if (length(lev) > 0 && ref_lab %in% lev) {
+      a_ <- stats::relevel(a_, ref = ref_lab)
+    } else {
+      warning("code.exposure.ref = ", ref_lab,
+              " is not found among factor levels. The first level is used as reference.")
+      ref_lab <- NULL
+    }
+  }
+  if (is.null(ref_lab)) ref_lab <- lev[1L]
+
+  # 3) Sanity check for levels
+  if (K < 1 || K == 1) stop("Exposure has only one level (", lev, ") or no valid levels. Effect estimation is not possible.")
+
+  # 4) Design matrix (treatment coding: K-1 columns)
+  X <- stats::model.matrix(~ a_)[, -1, drop = FALSE]
+
+  # 5) Rename columns with prefix
+  cn <- colnames(X)
+  cn <- sub("^a_", paste0(prefix, "_"), cn, perl = TRUE)
+  colnames(X) <- cn
+
+  return(list(
+    x_a = as.matrix(X),
+    levels = lev,
+    ref = ref_lab,
+    K = K,
+    is_binary = (K == 2L),
+    coding = "treatment(K-1)"
+  ))
+}
+
