@@ -466,7 +466,7 @@ estimating_equation_proportional <- function(
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
-    potential.CIFs <- calculatePotentialCIFs(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
+    potential.CIFs <- calculatePotentialRisk(alpha_beta, x_a, x_l, offset, estimand)
     one <- rep(1, nrow(x_l))
     a <- as.vector(x_a)
     ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
