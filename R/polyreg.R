@@ -98,7 +98,7 @@ polyreg <- function(
   computation.time0 <- proc.time()
   cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
   outcome.type <- cs$outcome.type
-  ci <- checkInput(data, nuisance.model, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, nleqslv.method)
+  ci <- checkInput(data, nuisance.model, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.boot.conf, nleqslv.method)
   report.boot.conf <- ci$report.boot.conf
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
@@ -113,7 +113,9 @@ polyreg <- function(
     code.event1=code.event1,
     code.event2=code.event2,
     code.censoring=code.censoring,
-    code.exposure.ref=code.exposure.ref
+    code.exposure.ref=code.exposure.ref,
+    exposure.levels=ci$exposure.levels,
+    index.vector=ci$index.vector
   )
   optim.method <- list(
     nleqslv.method = nleqslv.method,
@@ -158,6 +160,7 @@ polyreg <- function(
       out_normalizeCovariate = out_normalizeCovariate
     )
   }
+  alpha_beta_0 <- rep(0, estimand$index.vector[8])
 
   #######################################################################################################
   # 3. Calculating IPCW (function: calculateIPCW, calculateIPCWMatrix)
@@ -179,7 +182,7 @@ polyreg <- function(
       call_and_capture <- function(fun, ...) {
       out_ipcw <<- do.call(fun, list(...))
       out_ipcw$ret
-    }
+      }
       estimating_equation_i <- function(p) call_and_capture(
         estimating_equation_ipcw,
         formula = nuisance.model, data = normalized_data, exposure = exposure,
@@ -296,7 +299,7 @@ polyreg <- function(
   store_params <- TRUE
 
   while ((iteration < optim.parameter4) & (max.absolute.difference > optim.parameter1)) {
-    iteration <- iteration + 1L
+    iteration <- iteration + 1
     prev_params <- current_params
 
     out_nleqslv <- nleqslv(
@@ -362,6 +365,7 @@ polyreg <- function(
       alpha_beta_estimated <- adj * current_params
       adj_matrix <- diag(adj, length(adj))
       cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
+      #cov_estimated <- NULL
     } else {
       alpha_beta_estimated <- current_params
       cov_estimated <- out_calculateCov$cov_estimated
@@ -372,6 +376,7 @@ polyreg <- function(
   out_calculateCov <- switch(
     outcome.type,
     "COMPETING-RISK" = calculateCov(out_getResults, estimand, prob.bound),
+    #    "COMPETING-RISK" = NULL,
     "SURVIVAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "BINOMIAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "PROPORTIONAL" = NULL,

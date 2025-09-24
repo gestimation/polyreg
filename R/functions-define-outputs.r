@@ -90,12 +90,12 @@ reportEffects <- function(outcome.type,
                           conf.level,
                           outer.optim.method) {
 
-  i_parameter <- out_getResults$i_parameter
+  index.vector <- estimand$index.vector
   if (report.nuisance.parameter==TRUE) {
-    coef1 <- getCoef(1:i_parameter[3], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
+    coef1 <- getCoef(1:index.vector[3], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
     terms_text <- c("Intercept", attr(terms(nuisance.model), "term.labels"), paste(exposure, "( ref =", estimand$code.exposure.ref, ")"))
   } else {
-    coef1 <- getCoef(i_parameter[3], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
+    coef1 <- getCoef(index.vector[3], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
     terms_text <- paste(exposure, "( ref =", estimand$code.exposure.ref, ")")
   }
   exposed_events1 <- sum(out_getResults$y_1 * out_getResults$x_a)
@@ -103,9 +103,9 @@ reportEffects <- function(outcome.type,
 
   if (outcome.type == 'COMPETING-RISK') {
     if (report.nuisance.parameter==TRUE) {
-      coef2 <- getCoef(i_parameter[4]:i_parameter[7], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
+      coef2 <- getCoef(index.vector[4]:index.vector[7], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
     } else {
-      coef2 <- getCoef(i_parameter[7], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
+      coef2 <- getCoef(index.vector[7], alpha_beta_estimated, cov_estimated, report.boot.conf, out_bootstrap, conf.level)
     }
     exposed_events2 <- sum(out_getResults$y_2 * out_getResults$x_a)
     unexposed_events2 <- sum(out_getResults$y_2 * (1 - out_getResults$x_a))
@@ -155,7 +155,7 @@ reportEffects <- function(outcome.type,
                            param_diff,
                            max(sol$fvec),
                            sol$iter,
-                           i_parameter[3],
+                           index.vector[3],
                            getMessage(outer.optim.method, sol))
       ),
       event2 = list(
@@ -170,7 +170,7 @@ reportEffects <- function(outcome.type,
                            param_diff,
                            max(sol$fvec),
                            sol$iter,
-                           i_parameter[7] - i_parameter[4] + 1,
+                           index.vector[7] - index.vector[4] + 1,
                            "-")
       )
     )
@@ -188,7 +188,7 @@ reportEffects <- function(outcome.type,
                          param_diff,
                          max(sol$fvec),
                          sol$iter,
-                         i_parameter[3],
+                         index.vector[3],
                          getMessage(outer.optim.method, sol))
     )
     class(tg1) <- "modelsummary_list"
@@ -208,7 +208,7 @@ reportConstantEffects <- function(nuisance.model,
                                outer.optim.method) {
   if (is.null(out_bootstrap)) return(NULL)
 
-  i_parameter <- out_getResults$i_parameter
+  index.vector <- estimand$index.vector
   coef1 <- list(coef = out_bootstrap$boot.coef[1], coef_se = out_bootstrap$boot.coef_se[1], conf_low = out_bootstrap$boot.conf_low[1], conf_high = out_bootstrap$boot.conf_high[1], p_value = out_bootstrap$boot.p_value[1])
   coef2 <- list(coef = out_bootstrap$boot.coef[2], coef_se = out_bootstrap$boot.coef_se[2], conf_low = out_bootstrap$boot.conf_low[2], conf_high = out_bootstrap$boot.conf_high[2], p_value = out_bootstrap$boot.p_value[2])
 
@@ -249,7 +249,7 @@ reportConstantEffects <- function(nuisance.model,
                          sum(out_getResults$y_1),
                          describeEvents(sum(out_getResults$y_1 * out_getResults$x_a), sum(out_getResults$x_a), TRUE),
                          describeEvents(sum(out_getResults$y_1 * (1 - out_getResults$x_a)), length(out_getResults$y_1) - sum(out_getResults$x_a), FALSE),
-                         i_parameter[3],
+                         index.vector[3],
                          getMessage(outer.optim.method, sol))
     ),
     event2 = list(
@@ -257,7 +257,7 @@ reportConstantEffects <- function(nuisance.model,
       glance = glance_df(text_values$effect2_text,
                          sum(out_getResults$y_2), describeEvents(sum(out_getResults$y_2 * out_getResults$x_a), sum(out_getResults$x_a), TRUE),
                          describeEvents(sum(out_getResults$y_2 * (1 - out_getResults$x_a)), length(out_getResults$y_2) - sum(out_getResults$x_a), FALSE),
-                         i_parameter[7] - i_parameter[4] + 1,
+                         index.vector[7] - index.vector[4] + 1,
                          "-")
     )
   )

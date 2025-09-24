@@ -301,7 +301,7 @@ checkInput_new <- function(outcome.type, conf.level, report.boot.conf, nleqslv.m
   )
 }
 
-checkInput <- function(data, formula, code.event1, code.event2, code.censoring, outcome.type, conf.level, report.boot.conf, nleqslv.method) {
+checkInput <- function(data, formula, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.boot.conf, nleqslv.method) {
   cl <- match.call()
   if (missing(formula)) stop("A formula argument is required")
   mf <- match.call(expand.dots = TRUE)[1:3]
@@ -326,7 +326,19 @@ checkInput <- function(data, formula, code.event1, code.event2, code.censoring, 
       if (!all(Y[, 2] %in% c(code.event1, code.event2, code.censoring))) stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
     }
   }
-  if (!is.numeric(conf.level) || length(conf.level) != 1L || conf.level <= 0 || conf.level >= 1)
+
+  a_ <- as.factor(data[[exposure]])
+  if (code.exposure.ref==0) {
+    x_a <- as.matrix(model.matrix(~ a_)[, -1])
+  } else {
+    x_a <- as.matrix(rep(1,length(t)) - model.matrix(~ a_)[, -1])
+  }
+  exposure.levels <- ncol(x_a)+1
+  x_l <- model.matrix(out_terms, mf)
+  index.vector <- rep(NA, 7)
+  index.vector <- calculateIndexForParameter(NA,x_l,x_a)
+
+  if (!is.numeric(conf.level) || length(conf.level) != 1 || conf.level <= 0 || conf.level >= 1)
     stop("conf.level must be a single number between 0 and 1")
   if (is.null(report.boot.conf) & (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL')) {
     report.boot.conf.corrected <- TRUE
@@ -337,7 +349,7 @@ checkInput <- function(data, formula, code.event1, code.event2, code.censoring, 
   }
   outer_choices <- c("nleqslv","Newton","Broyden")
   nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
-  return(list(report.boot.conf = report.boot.conf.corrected))
+  return(list(report.boot.conf = report.boot.conf.corrected, exposure.levels=exposure.levels, index.vector=index.vector))
 }
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
