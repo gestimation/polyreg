@@ -1,4 +1,3 @@
-
 estimating_equation_proportional_old <- function(
     formula,
     data,
@@ -10,6 +9,7 @@ estimating_equation_proportional_old <- function(
     prob.bound,
     initial.CIFs = NULL
 ) {
+  print("old")
   cl <- match.call()
   mf <- match.call(expand.dots = TRUE)[1:3]
   special <- c("strata", "cluster", "offset")
@@ -72,11 +72,7 @@ estimating_equation_proportional_old <- function(
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
 
-    if (optim.method$computation.order.method=="OLD") {
-      potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    } else {
-      potential.CIFs <- calculatePotentialCIFs_parallel(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
-    }
+    potential.CIFs <- calculatePotentialCIFs_old(alpha_beta,x_a,x_l,offset,epsilon,estimand,optim.method,prob.bound,initial.CIFs)
     one <- rep(1, nrow(x_l))
     a <- as.vector(x_a)
     ey_1 <- potential.CIFs[,2]*a + potential.CIFs[,1]*(one - a)
@@ -118,8 +114,6 @@ estimating_equation_proportional_old <- function(
   )
   return(out)
 }
-
-
 
 calculatePotentialCIFs_old <- function(
     alpha_beta_tmp,
@@ -190,18 +184,9 @@ calculatePotentialCIFs_old <- function(
       )
     }
 
-    if (optim.method$inner.optim.method %in% c("optim", "BFGS")) {
-      sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS",
-                   control = list(maxit = optim.method$optim.parameter7,
-                                  reltol = optim.method$optim.parameter6))
-    } else if (optim.method$inner.optim.method == "SANN") {
-      sol <- optim(par = log_p0, fn = eq_fn, method = "SANN",
-                   control = list(maxit = optim.method$optim.parameter7,
-                                  reltol = optim.method$optim.parameter6))
-    } else {
-      stop("Unsupported inner.optim.method")
-    }
-
+    sol <- optim(par = log_p0, fn = eq_fn, method = "BFGS",
+                 control = list(maxit = 200,
+                                reltol = 1e-6))
     probs <- clampP(exp(sol$par), prob.bound)
     list.CIFs[[i_x]] <- probs
     previous.CIFs     <- probs
@@ -210,8 +195,6 @@ calculatePotentialCIFs_old <- function(
   potential.CIFs <- do.call(rbind, list.CIFs)
   return(potential.CIFs)
 }
-
-
 
 estimating_equation_CIFs <- function(
     log_p,
@@ -261,7 +244,7 @@ estimating_equation_CIFs <- function(
       ret[3] <- alpha_tmp_2 - clog_p[2] - clog_p[4] + lp0102
       ret[4] <- beta_tmp_2  - clog_p[4] + clog_p[2] +
         log1p(-exp_lp[4]) - log1p(-exp_lp[2])
-    } else if (estimand$effect.measure2 == '') {
+    } else if (estimand$effect.measure2 == "SHR") {
       ret[3] <- alpha_tmp_2 - clog_p[2] - clog_p[4] + lp0102
       ret[4] <- exp(beta_tmp_2) - ( log1p(-exp_lp[4]) / log1p(-exp_lp[2]) )
     } else {

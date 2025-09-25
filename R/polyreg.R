@@ -262,7 +262,7 @@ polyreg <- function(
       prob.bound = prob.bound, initial.CIFs = initial.CIFs
     )
       estimating_equation_p <- function(p) call_and_capture(
-      estimating_equation_proportional,
+      estimating_equation_proportional_old,
       formula = nuisance.model, data = normalized_data, exposure = exposure,
       ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
       optim.method = optim.method, prob.bound = prob.bound,
