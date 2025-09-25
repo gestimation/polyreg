@@ -14,21 +14,14 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup, include=FALSE, warning=FALSE}
-library(devtools)
-devtools::load_all()
-install_github("gestimation/polyreg") 
-#pak::pak("gestimation/polyreg")
-#devtools::install_github("gestimation/polyreg") 
+```{r setup, include=FALSE}
 library(polyreg)
-#library(mets)
-library(nleqslv)is
 library(modelsummary)
 ```
 
 ## Overview
 
-The polyreg package implements direct polynomial regression, a model that estimates multiplicative effects (e.g., risk ratio, odds ratio, or sub-distribution hazard ratio) on risks, cumulative incidence probabilities at a specific time point, or common effects over time. A key feature of this model is its ability to analyze multiple competing events simultaneously while ensuring that the probabilities sum to one. This is achieved by reparameterizing nuisance parameters using polytomous log odds products. Additionally, the package supports direct binomial regression for survival outcomes and the Richardson model for binomial outcomes, both of which use log odds products.
+The polyreg package implements direct polynomial regression, a model that estimates multiplicative effects (e.g., risk ratio, odds ratio, or sub-distribution hazard ratio) on risks, cumulative incidence probabilities at a specific time point, or common effects over time. A key feature of this model is its ability to analyze multiple competing events simultaneously while ensuring that the probabilities sum to one. This is achieved by reparameterizing nuisance parameters using polytomous log odds products. Additionally, the package supports direct binomial regression for survival outcomes, the Richardson model for binomial outcomes, and proportional effect models, all of which use log odds products.
 
 The models in polyreg are specified by three main components:
 
@@ -43,7 +36,7 @@ Censoring adjustment: Specifies strata for inverse probability weighting to adju
 
 The nuisance.model argument specifies the formula linking the outcome to covariates. Its format depends on the outcome type:
 
-Competing risks or survival outcome: Use Surv() or Event() with time and status variables. 
+Competing risks or survival outcome: Use `Event()` with time and status indicators or `Surv()` objects.
 
 Binomial outcome: Use standard R formula notation.
 
@@ -55,17 +48,19 @@ Survival outcome: 1 for events, 0 for censored observations.
 
 Binomial outcome: 0 and 1.
 
-Event codes can be customized using code.event1, code.event2, and code.censoring. The outcome.type argument must be set to:
+Event codes can be customized using `code.event1`, `code.event2`, and `code.censoring`. The outcome.type argument must be set to:
 
-Effects on cumulative incidence probabilities at a specific time: 'COMPETINGRISK'
+Effects on cumulative incidence probabilities at a specific time: `'COMPETING-RISK'`
 
-Effects on a risk at a specific time: 'SURVIVAL'
+Effects on a risk at a specific time: `'SURVIVAL'`
 
-Effects on a risk of a binomial outcome: 'BINOMIAL'
+Effects on a risk of a binomial outcome: `'BINOMIAL'`
 
-Common effects on cumulative incidence probabilities over time: 'PROPORTIONAL'
+Common effects on cumulative incidence probabilities over time: `'PROPORTIONAL'`
 
-Covariates included in nuisance.model should adjust for confounding factors to obtain unbiased exposure effect estimates. 
+Common effects on cumulative incidence probabilities when nuisance parameters vary by cause and time: `'POLY-PROPORTIONAL'`
+
+Covariates included in `nuisance.model` should adjust for confounding factors to obtain unbiased exposure effect estimates.
 
 ### 2. Effect measures and time points
 
@@ -77,43 +72,55 @@ Odds Ratio (OR)
 
 Sub-distribution Hazard Ratio (SHR)
 
-Set the desired measure using effect.measure1 and, for competing risks analysis, effect.measure2. The time.point argument specifies the follow-up time at which effects are estimated. 
+Set the desired measure using `effect.measure1` and, for competing risks analysis, `effect.measure2`. The `time.point` argument specifies the follow-up time at which effects are estimated. For proportional effect models, polyreg will internally evaluate effects over the observed event times.
 
 ### 3. Censoring adjustment
 
-Inverse probability weights adjust for dependent censoring. Use the strata argument to specify stratification variables. If no strata are specified, Kaplan-Meier weights are used. 
+Inverse probability weights adjust for dependent censoring. Use the `strata` argument to specify stratification variables. If no strata are specified, Kaplan-Meier weights are used.
+
+### 4. Optional arguments for preprocessing
+
+Additional arguments allow analysts to control data preparation. `subset.condition` subsets the data prior to fitting the model, `na.action` specifies the treatment of missing values in the model frame, and `code.exposure.ref` chooses the exposure reference category when the exposure is not coded as 0/1. When covariates are on different scales, `should.normalize.covariate = TRUE` standardizes them prior to optimisation.
+
+### 5. Reporting options
+
+Three logical arguments govern the contents of the returned list:
+
+* `report.nuisance.parameter` includes estimates of the nuisance parameters (default `FALSE`).
+* `report.optim.convergence` appends diagnostics regarding optimisation convergence (default `FALSE`).
+* `report.boot.conf` enables bootstrap confidence intervals; when set to `TRUE`, use `boot.parameter1`, `boot.parameter2`, and `boot.bca` to tailor the resampling.
+
+These options help tailor the output to exploratory work, reporting, or quality assurance needs without requiring additional post-processing.
 
 
 ## Output
 
 The main components of the output list include:
 
-coefficient: Regression coefficients
+* `coefficient`: Regression coefficients
+* `cov`: Variance-covariance matrix
+* `diagnosis.statistics`: Inverse probability weights, influence functions, and predicted values
+* `summary`: Summary of exposure effect estimates
+* `summary.full`: Detailed summary including all regression coefficients (returned when `report.nuisance.parameter = TRUE`)
+* `optim.convergence`: Optimisation diagnostics (returned when `report.optim.convergence = TRUE`)
+* `boot.summary`: Bootstrap-based confidence intervals (returned when `report.boot.conf = TRUE`)
 
-cov: Variance-covariance matrix
-
-diagnosis.statistics: Inverse probability weights, influence functions, and predicted values 
-
-summary: Summary of exposure effect estimates
-
-summary.full: Detailed summary including all regression coefficients
-
-Use the summary or summary.full output with msummary() to display formatted results. The regression coefficients and their variance-covariance matrix are provided as coefficient and cov, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in nuisance.model, and the last element to exposure. Finally, diagnosis.statistics is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
+Use the `summary` or `summary.full` output with `msummary()` to display formatted results. The regression coefficients and their variance-covariance matrix are provided as `coefficient` and `cov`, respectively, with the first element corresponding to the intercept term, subsequent elements to the covariates in `nuisance.model`, and the last element to exposure. Finally, `diagnosis.statistics` is a dataset containing inverse probability weights, influence functions, and predicted values of the potential outcomes of individual observations.
 
 ## Example 1. Unadjusted competing risks analysis
 
 For the initial illustration, unadjusted analysis focusing on cumulative incidence probabilities of event 1 and 2 at 8 years is demonstrated. Regression coefficients and variance covariance matrix of both exposure (fruitq1) and covariates (intercept in this case) in the fitted direct polytomous regression are presented. 
 
 ```{r example1}
-library(polyreg)
 data(diabetes.complications)
 output <- polyreg(nuisance.model = Event(t,epsilon) ~ 1, exposure = 'fruitq1', data = diabetes.complications,
-          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+          effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='COMPETING-RISK',
+          report.nuisance.parameter = TRUE)
 print(output$coefficient)
 print(output$cov)
 ```
 
-The summaries of analysis results in the list of outputs (e.g. output$summary.full below) are in accordance with the format of model summary function. All regression coefficients above are included in summary.full and model summary may be used to converted to risk ratios, odds ratios or sub-distribution hazards ratios by selecting exponentiate=TRUE option. The summaries can be displayed in Viewer with customized statistics such as p-values or confidence intervals. 
+The summaries of analysis results in the list of outputs (e.g. `output$summary.full` below) follow the format expected by model summary functions. All regression coefficients above are included in `summary.full` once `report.nuisance.parameter = TRUE`. Model summary output may be converted to risk ratios, odds ratios, or sub-distribution hazard ratios by selecting the `exponentiate = TRUE` option. The summaries can be displayed in the RStudio Viewer with customised statistics such as p-values or confidence intervals.
 
 ```{r example2}
 msummary(output$summary.full, statistic = c("conf.int"), exponentiate = TRUE)
@@ -127,7 +134,7 @@ The second example is survival analysis (outcome.type='SURVIVAL') to estimate th
 data(diabetes.complications)
 diabetes.complications$d <- (diabetes.complications$epsilon>0)
 output <- polyreg(nuisance.model = Event(t,d) ~ age+sex+bmi+hba1c+diabetes_duration
-          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa, 
+          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa,
           exposure = 'fruitq1', strata='strata', data = diabetes.complications,
           effect.measure1='RR', time.point=8, outcome.type='SURVIVAL')
 ```
@@ -144,7 +151,7 @@ Binomial analysis is conducted if outcome.type='BINOMIAL'. Outcomes of observati
 
 ```{r example5}
 output <- polyreg(nuisance.model = d ~ age+sex+bmi+hba1c+diabetes_duration
-          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa, 
+          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa,
           exposure = 'fruitq1', strata='strata', data = diabetes.complications,
           effect.measure1='RR', time.point=8, outcome.type='BINOMIAL')
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
@@ -152,7 +159,7 @@ msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 
 ## Example 4. Competing risks analysis
 
-The code below specifies direct polytomous regression of both of competing events (outcome.type='COMPETINGRISK'). Initial values of regression parameters are imported by data.initial.values. 
+The code below specifies direct polytomous regression of both of competing events (`outcome.type = 'COMPETING-RISK'`). Initial values of regression parameters are imported by `data.initial.values`.
 
 ```{r example6}
 data.initial.values <- c(-20.01, 1.591, -0.2065, 1.962, 10.05, 4.004, 0.9624, 1.582, 2.414, -0.02140,
@@ -160,9 +167,9 @@ data.initial.values <- c(-20.01, 1.591, -0.2065, 1.962, 10.05, 4.004, 0.9624, 1.
                          4.048, -5.012, 0.05348, 0.1609, 6.432, -0.4783, -3.230, -4.135, 1.451, 0.04964,
                          3.822, -0.08824)
 output <- polyreg(nuisance.model = Event(t,epsilon) ~ age+sex+bmi+hba1c+diabetes_duration
-          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa, 
+          +drug_oha+drug_insulin+sbp+ldl+hdl+tg+current_smoker+alcohol_drinker+ltpa,
           exposure = 'fruitq1', strata='strata', data=diabetes.complications,
-          effect.measure1='RR', time.point=8, outcome.type='COMPETINGRISK',
+          effect.measure1='RR', time.point=8, outcome.type='COMPETING-RISK',
           data.initial.values=data.initial.values)
 msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
 ```

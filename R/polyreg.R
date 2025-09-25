@@ -1,56 +1,121 @@
 #' @title Direct polynomial regression for competing risks, survival and binomial analysis
+#' @description Fits the direct polynomial regression model for a binary exposure
+#'   under several outcome types, including competing risks, survival and
+#'   binomial endpoints.
 #'
-#' @param nuisance.model formula Model formula representing outcome and covariates other than exposure
-#' @param exposure character Column name representing the binary exposure variable.
-#' @param strata character Column name representing the stratification variable for adjustment for dependent censoring. Defaults to NULL.
-#' @param data data.frame Input dataset containing the outcome, the exposure and covariates.
-#' @param subset.condition character Specifies a condition for subsetting the data. Defaults to NULL.
-#' @param na.action character Specifies a missing-data filter function, applied to the model frame, after any subset argument has been used. Defaults to na.omit.
-#' @param code.event1 integer Specifies the code of event 1. Defaults to 1.
-#' @param code.event2 integer Specifies the code of event 2. Defaults to 2.
-#' @param code.censoring integer Specifies the code of censoring. Defaults to 0.
-#' @param code.exposure.ref integer Specifies the code of the reference category of exposure. Defaults to 0.
-#' @param effect.measure1 character Specifies the effect measure for event (RR, OR, SHR).
-#' @param effect.measure2 character Specifies the effect measure for competing risk (RR, OR, SHR).
-#' @param time.point numeric The time point for exposure effects to be estimated.
-#' @param outcome.type character Specifies the type of outcome (COMPETING-RISK, SURVIVAL, BINOMIAL, PROPORTIONAL and POLY-PROPORTIONAL).
-#' @param conf.level numeric The level for confidence intervals.
-#' @param report.nuisance.parameter logical Specifies contents of return. (TRUE = report estimates of nuisance parameters, FALSE = otherwise). Defaults to FALSE.
-#' @param report.optim.convergence logical Specifies contents of return. (TRUE = report indicators of convergence of parameter estimation, FALSE = otherwise). Defaults to FALSE.
-#' @param report.boot.conf logical Specifies contents of return. (TRUE = report bootstrap confidence intervals, FALSE = otherwise). Defaults to FALSE.
-#' @param boot.bca logical Specifies the method of bootstrap confidence intervals (TRUE = BCA method, FALSE = normal approximation).
-#' @param boot.parameter1 integer Number of replications for bootstrap confidence intervals. Defaults to 200.
-#' @param boot.parameter2 numeric Seed used for bootstrap confidence intervals.
-#' @param nleqslv.method character Specifies the method of optimization (nleqslv, Broyden, Newton, optim, BFGS, SANN).
-#' @param optim.parameter1 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
-#' @param optim.parameter2 numeric A threshold for determining convergence in outer loop. Defaults to 1e-5.
-#' @param optim.parameter3 numeric Constraint range for parameters. Defaults to 100.
-#' @param optim.parameter4 integer Maximum number of iterations in outer loop. Defaults to 50.
-#' @param optim.parameter5 integer Maximum number of iterations for nleqslv in outer loop. Defaults to 50.
-#' @param optim.parameter6 integer Maximum number of iterations for Levenberg-Marquardt routine. Defaults to 50.
-#' @param optim.parameter7 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-10.
-#' @param optim.parameter8 numeric A threshold for determining convergence in Levenberg-Marquardt routine. Defaults to 1e-5.
-#' @param optim.parameter9 numeric Lambda in Levenberg-Marquardt routine. Defaults to 1e-5.
-#' @param optim.parameter10 numeric Maximum for lambda in Levenberg-Marquardt routine. Defaults to 40.
-#' @param optim.parameter11 numeric Minimum for lambda in Levenberg-Marquardt routine. Defaults to 0.025.
-#' @param optim.parameter12 numeric Increment for lambda in Levenberg-Marquardt routine. Defaults to 2.
-#' @param optim.parameter13 numeric Decrement for lambda in Levenberg-Marquardt routine. Defaults to 0.5.
-#' @param data.initlal.values data.frame A dataset containing initial values. Defaults to NULL.
-#' @param should.normalize.covariate logical Indicates whether covariates are normalized (TRUE = normalize, FALSE = otherwise). Defaults to TRUE.
-#' @param prob.bound numeric A threshold for clamping probabilities. Defaults to 1e-5.
+#' @param nuisance.model A \code{\link[stats]{formula}} describing the outcome and
+#'   nuisance covariates, excluding the exposure of interest.
+#' @param exposure A character string giving the name of the binary exposure
+#'   variable in \code{data}.
+#' @param strata Optional character string with the name of the stratification
+#'   variable used to adjust for dependent censoring. Defaults to \code{NULL}.
+#' @param data A data frame containing the outcome, exposure and nuisance
+#'   covariates referenced by \code{nuisance.model}.
+#' @param subset.condition Optional expression (as a character string) defining a
+#'   subset of \code{data} to analyse. Defaults to \code{NULL}.
+#' @param na.action A function specifying the action to take on missing values.
+#'   The default is \code{\link[stats]{na.omit}}.
+#' @param code.event1 Integer code corresponding to the first event of interest.
+#'   Defaults to \code{1}.
+#' @param code.event2 Integer code corresponding to the competing event. Defaults
+#'   to \code{2}.
+#' @param code.censoring Integer code representing censoring. Defaults to
+#'   \code{0}.
+#' @param code.exposure.ref Integer code identifying the reference exposure
+#'   category. Defaults to \code{0}.
+#' @param effect.measure1 Character string specifying the effect measure for the
+#'   primary event. Supported values are \code{"RR"}, \code{"OR"} and
+#'   \code{"SHR"}.
+#' @param effect.measure2 Character string specifying the effect measure for the
+#'   competing event. Supported values are \code{"RR"}, \code{"OR"} and
+#'   \code{"SHR"}.
+#' @param time.point Numeric time point at which the exposure effect is
+#'   evaluated. Required for survival and competing risk analyses.
+#' @param outcome.type Character string selecting the outcome type. Valid values
+#'   are \code{"COMPETING-RISK"}, \code{"SURVIVAL"}, \code{"BINOMIAL"},
+#'   \code{"PROPORTIONAL"} and \code{"POLY-PROPORTIONAL"}. Defaults to
+#'   \code{"COMPETING-RISK"}.
+#' @param conf.level Confidence level for Wald-type intervals. Defaults to
+#'   \code{0.95}.
+#' @param report.nuisance.parameter Logical; if \code{TRUE}, the returned object
+#'   includes estimates of the nuisance model parameters. Defaults to
+#'   \code{FALSE}.
+#' @param report.optim.convergence Logical; if \code{TRUE}, optimisation
+#'   convergence summaries are returned. Defaults to \code{FALSE}.
+#' @param report.boot.conf Logical or \code{NULL}. When \code{TRUE}, bootstrap
+#'   confidence intervals are computed. When \code{FALSE}, they are omitted. If
+#'   \code{NULL}, the function chooses based on \code{outcome.type}.
+#' @param boot.bca Logical indicating the bootstrap confidence interval method.
+#'   Use \code{TRUE} for bias-corrected and accelerated intervals or \code{FALSE}
+#'   for the normal approximation.
+#' @param boot.parameter1 Integer giving the number of bootstrap replications.
+#'   Defaults to \code{200}.
+#' @param boot.parameter2 Optional numeric seed used when resampling during
+#'   bootstrap inference.
+#' @param nleqslv.method Character string defining the solver used by
+#'   \code{\link[nleqslv]{nleqslv}}. Available choices include \code{"nleqslv"},
+#'   \code{"Broyden"}, \code{"Newton"}, \code{"optim"}, \code{"BFGS"} and
+#'   \code{"SANN"}.
+#' @param optim.parameter1 Numeric tolerance for convergence of the outer loop.
+#'   Defaults to \code{1e-6}.
+#' @param optim.parameter2 Numeric tolerance for convergence of the inner loop.
+#'   Defaults to \code{1e-6}.
+#' @param optim.parameter3 Numeric constraint on the absolute value of
+#'   parameters. Defaults to \code{100}.
+#' @param optim.parameter4 Integer maximum number of outer loop iterations.
+#'   Defaults to \code{50}.
+#' @param optim.parameter5 Integer maximum number of \code{nleqslv}
+#'   iterations per outer iteration. Defaults to \code{50}.
+#' @param optim.parameter6 Integer maximum number of iterations for the
+#'   Levenberg-Marquardt routine. Defaults to \code{50}.
+#' @param optim.parameter7 Numeric convergence tolerance for the
+#'   Levenberg-Marquardt routine. Defaults to \code{1e-10}.
+#' @param optim.parameter8 Numeric tolerance for updating the Hessian in the
+#'   Levenberg-Marquardt routine. Defaults to \code{1e-6}.
+#' @param optim.parameter9 Numeric starting value for the Levenberg-Marquardt
+#'   damping parameter lambda. Defaults to \code{1e-6}.
+#' @param optim.parameter10 Numeric upper bound for lambda in the
+#'   Levenberg-Marquardt routine. Defaults to \code{40}.
+#' @param optim.parameter11 Numeric lower bound for lambda in the
+#'   Levenberg-Marquardt routine. Defaults to \code{0.025}.
+#' @param optim.parameter12 Numeric multiplicative increment applied to lambda
+#'   when the Levenberg-Marquardt step is successful. Defaults to \code{2}.
+#' @param optim.parameter13 Numeric multiplicative decrement applied to lambda
+#'   when the Levenberg-Marquardt step is unsuccessful. Defaults to \code{0.5}.
+#' @param data.initial.values Optional data frame providing starting values for
+#'   the optimisation. Defaults to \code{NULL}.
+#' @param should.normalize.covariate Logical indicating whether covariates should
+#'   be centred and scaled prior to optimisation. Defaults to \code{TRUE}.
+#' @param prob.bound Numeric lower bound used to truncate probabilities away
+#'   from 0 and 1. Defaults to \code{1e-5}.
 #' @importFrom nleqslv nleqslv
 #' @importFrom boot boot boot.ci
 #' @importFrom Rcpp sourceCpp
 #' @useDynLib polyreg, .registration = TRUE
 #'
-#' @return A list of results from direct polynomial regression. coefficient and cov are estimated regression coefficients of exposure and covariates and their variance covariance matrix. summary meets requirement of msummary function. diagnosis.statistics in includes inverse probability weights, influence functions, and predicted potential outcomes
-#' @export polyreg
+#' @return A list containing fitted exposure effects and supporting results. The
+#'   main components include \code{coefficient} (estimated exposure and
+#'   covariate effects), \code{cov} (their variance-covariance matrix),
+#'   \code{summary} (a tidy summary table compatible with
+#'   \code{\link[modelsummary]{msummary}}) and \code{diagnosis.statistics}
+#'   (inverse probability weights, influence functions and predicted potential
+#'   outcomes).
+#' @export
 #'
 #' @examples
 #' data(diabetes.complications)
-#' output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+#' output <- polyreg(
+#'   nuisance.model = Event(t, epsilon) ~ +1,
+#'   exposure = "fruitq1",
+#'   data = diabetes.complications,
+#'   effect.measure1 = "RR",
+#'   effect.measure2 = "RR",
+#'   time.point = 8,
+#'   outcome.type = "COMPETING-RISK"
+#' )
 #' library(modelsummary)
 #' msummary(output$summary, statistic = c("conf.int"), exponentiate = TRUE)
+
 polyreg <- function(
     nuisance.model,
     exposure,
