@@ -56,6 +56,11 @@
 #'   \code{\link[nleqslv]{nleqslv}}. Available choices include \code{"nleqslv"},
 #'   \code{"Broyden"}, \code{"Newton"}, \code{"optim"}, \code{"BFGS"} and
 #'   \code{"SANN"}.
+#' @param L1.penalty Logical or non-negative numeric scalar. When set to
+#'   \code{TRUE}, a default L1-penalised proximal update is applied to the
+#'   nuisance-parameter block associated with \code{x_l}. Providing a numeric
+#'   value allows customising the shrinkage intensity, while \code{FALSE}
+#'   disables the sparse update. Defaults to \code{FALSE}.
 #' @param optim.parameter1 Numeric tolerance for convergence of the outer loop.
 #'   Defaults to \code{1e-6}.
 #' @param optim.parameter2 Numeric tolerance for convergence of the inner loop.
@@ -139,6 +144,7 @@ polyreg <- function(
     boot.parameter1 = 200,
     boot.parameter2 = 46,
     nleqslv.method = "nleqslv",
+    L1.penalty = FALSE,
     optim.parameter1 = 1e-6,
     optim.parameter2 = 1e-6,
     optim.parameter3 = 100,
@@ -262,7 +268,7 @@ polyreg <- function(
       prob.bound = prob.bound, initial.CIFs = initial.CIFs
     )
       estimating_equation_p <- function(p) call_and_capture(
-      estimating_equation_proportional_old,
+      estimating_equation_proportional,
       formula = nuisance.model, data = normalized_data, exposure = exposure,
       ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
       optim.method = optim.method, prob.bound = prob.bound,
@@ -353,12 +359,16 @@ polyreg <- function(
   )
 
   obj <- makeObjectiveFunction()
+  l1_spec <- resolve_l1_penalty(L1.penalty, nrow(normalized_data), estimand$index.vector[1])
+  l1_indices <- if (l1_spec$enabled) select_l1_indices(outcome.type, estimand$index.vector) else integer(0)
+  apply_l1_update <- function(params) apply_proximal_l1(params, l1_spec$lambda, l1_indices)
+
   estimating_fun <- choose_estimating_equation(outcome.type, obj)
   nleqslv_method  <- choose_nleqslv_method(nleqslv.method)
   iteration <- 0L
   max.absolute.difference <- Inf
   out_nleqslv <- NULL
-  current_params <- alpha_beta_0
+  current_params <- apply_l1_update(alpha_beta_0)
   current_obj_value <- numeric(0)
   trace_df  <- NULL
   store_params <- TRUE
@@ -373,7 +383,7 @@ polyreg <- function(
       method  = nleqslv_method,
       control = list(maxit = optim.parameter5, allowSingular = FALSE)
     )
-    new_params <- out_nleqslv$x
+    new_params <- apply_l1_update(out_nleqslv$x)
 
     current_obj_value <- get_obj_value(new_params)
     obj$setInitialCIFs(obj$getResults()$potential.CIFs)
@@ -483,8 +493,19 @@ polyreg <- function(
       index_coef <- seq_len(out_normalizeCovariate$n_covariate+2)
     }
     boot_function <- function(data, indices) {
-      coef <- solveEstimatingEquation(nuisance.model=nuisance.model, exposure=exposure, strata=strata,
-                                      normalized_data = data[indices, , drop = FALSE], outcome.type=outcome.type, estimand=estimand, optim.method=optim.method, out_normalizeCovariate=out_normalizeCovariate, prob.bound=prob.bound, alpha_beta_0=alpha_beta_0)
+      coef <- solveEstimatingEquation(
+        nuisance.model = nuisance.model,
+        exposure = exposure,
+        strata = strata,
+        normalized_data = data[indices, , drop = FALSE],
+        outcome.type = outcome.type,
+        estimand = estimand,
+        optim.method = optim.method,
+        out_normalizeCovariate = out_normalizeCovariate,
+        prob.bound = prob.bound,
+        alpha_beta_0 = alpha_beta_0,
+        L1.penalty = L1.penalty
+      )
       return(coef)
     }
 

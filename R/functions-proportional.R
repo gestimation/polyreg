@@ -1,3 +1,49 @@
+resolve_l1_penalty <- function(option, n_obs, n_features) {
+  if (is.null(option) || identical(option, FALSE)) {
+    return(list(enabled = FALSE, lambda = 0))
+  }
+
+  if (isTRUE(option)) {
+    if (is.null(n_obs) || is.null(n_features) || n_obs <= 0 || n_features <= 0) {
+      return(list(enabled = FALSE, lambda = 0))
+    }
+    lambda <- sqrt(log(n_features + 1) / max(1, n_obs))
+  } else if (is.numeric(option) && length(option) == 1L && option >= 0) {
+    lambda <- option
+  } else {
+    stop("L1.penalty must be either logical or a non-negative numeric scalar.")
+  }
+
+  list(enabled = lambda > 0, lambda = lambda)
+}
+
+select_l1_indices <- function(outcome.type, index.vector) {
+  if (is.null(index.vector) || length(index.vector) == 0L) return(integer(0))
+  p_l <- index.vector[1]
+  if (is.na(p_l) || p_l <= 0) return(integer(0))
+
+  base_idx <- seq_len(p_l)
+
+  if (toupper(outcome.type) == "COMPETING-RISK") {
+    idx4 <- index.vector[4]
+    idx5 <- index.vector[5]
+    if (!is.na(idx4) && !is.na(idx5) && idx5 >= idx4) {
+      base_idx <- c(base_idx, seq.int(idx4, idx5))
+    }
+  }
+
+  base_idx
+}
+
+apply_proximal_l1 <- function(params, lambda, indices) {
+  if (!is.numeric(params) || length(indices) == 0L || lambda <= 0) {
+    return(params)
+  }
+  shrink <- function(x) sign(x) * pmax(abs(x) - lambda, 0)
+  params[indices] <- shrink(params[indices])
+  params
+}
+
 solveEstimatingEquation <- function(
     nuisance.model,
     exposure,
@@ -8,7 +54,8 @@ solveEstimatingEquation <- function(
     optim.method,
     out_normalizeCovariate,
     prob.bound,
-    alpha_beta_0
+    alpha_beta_0,
+    L1.penalty = FALSE
 ) {
   if (outcome.type == "COMPETING-RISK" | outcome.type == "SURVIVAL") {
     ip.weight <- calculateIPCW(nuisance.model, normalized_data, estimand$code.censoring, strata, estimand$time.point)
@@ -139,13 +186,16 @@ solveEstimatingEquation <- function(
 
   # ---- ループ（polyreg() と同じ構造） ------------------------------------------
   obj <- makeObjectiveFunction()
+  l1_spec <- resolve_l1_penalty(L1.penalty, nrow(normalized_data), estimand$index.vector[1])
+  l1_indices <- if (l1_spec$enabled) select_l1_indices(outcome.type, estimand$index.vector) else integer(0)
+  apply_l1_update <- function(params) apply_proximal_l1(params, l1_spec$lambda, l1_indices)
   estimating_fun <- choose_estimating_equation(outcome.type, obj)
   nleqslv_method <- choose_nleqslv_method(optim.method$nleqslv.method)
 
   iteration <- 0L
   max.absolute.difference <- Inf
   out_nleqslv <- NULL
-  current_params <- alpha_beta_0
+  current_params <- apply_l1_update(alpha_beta_0)
   current_obj_value <- numeric(0)
   trace_df  <- NULL
 
@@ -161,7 +211,7 @@ solveEstimatingEquation <- function(
       method  = optim.method$nleqslv_method,
       control = list(maxit = optim.method$optim.parameter5, allowSingular = FALSE)
     )
-    new_params <- out_nleqslv$x
+    new_params <- apply_l1_update(out_nleqslv$x)
 
     # 目的関数値と内部状態の更新
     current_obj_value <- get_obj_value(new_params)
