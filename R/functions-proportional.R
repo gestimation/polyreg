@@ -458,7 +458,7 @@ solveEstimatingEquationS <- function(
     data.initial.values,
     prob.bound = 1e-5
 ) {
-  outcome.type <- 'SURVIVAL'
+  outcome.type <- "SURVIVAL"
   ip.weight <- calculateIPCW(formula = nuisance.model, data = normalized_data, code.censoring=estimand$code.censoring, strata=strata, specific.time = estimand$time.point)
 
   makeObjectiveFunction <- function() {

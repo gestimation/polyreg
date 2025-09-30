@@ -310,7 +310,7 @@ polyreg <- function(
     criteria3 <- is_stalled(c(current_obj_value, obj_value))
     converged  <- (criteria1 || criteria2 || criteria3)
     converged.by <- if (!converged) NA_character_
-    else if (criteria1)   "Converged in relative difference"
+    else if (criteria1) "Converged in relative difference"
     else if (criteria2) "Converged in objective function"
     else "Stalled"
 
@@ -385,7 +385,7 @@ polyreg <- function(
 
     current_obj_value <- get_obj_value(new_params)
     obj$setInitialCIFs(obj$getResults()$potential.CIFs)
-    ac <- assessConvergence(new_params, prev_params, current_obj_value,optim.parameter1, optim.parameter2, optim.parameter3)
+    ac <- assessConvergence(new_params, prev_params, current_obj_value, optim.parameter1, optim.parameter2, optim.parameter3)
 
     nleqslv.info <- extractOptimizationInfo(out_nleqslv, nleqslv.method)
     computation.time.second <- as.numeric((proc.time() - computation.time0)[3])
@@ -404,7 +404,10 @@ polyreg <- function(
     )
 
     current_params <- new_params
+    converged.by <- ac$converged.by
+    objective.function = ac$obj_value
     max.absolute.difference <- ac$max.absolute.difference
+    relative.difference <- ac$relative.difference
     if (ac$converged) break
   }
   out_getResults <- obj$getResults()
@@ -522,21 +525,17 @@ polyreg <- function(
   #######################################################################################################
   # 7. Output (functions: reportSurvival, reportCOMPETING-RISK, reportPrediction)
   #######################################################################################################
-  if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
-    out_summary <- reportConstantEffects(
-      nuisance.model, exposure, estimand, out_bootstrap, out_getResults, iteration, max.absolute.difference, out_nleqslv, optim.method$nleqslv.method
-    )
-    out_data <- NULL
-  } else {
-    out_summary <- reportEffects (
-      outcome.type, report.nuisance.parameter, report.optim.convergence, report.boot.conf, nuisance.model, exposure, estimand, alpha_beta_estimated,
-      cov_estimated, out_bootstrap, out_getResults, iteration, max.absolute.difference, out_nleqslv,
-      conf.level, optim.method$nleqslv.method
-    )
+  out_summary <- reportEffects (
+    outcome.type, report.nuisance.parameter, report.optim.convergence, report.sandwich.conf, report.boot.conf,
+    nuisance.model, exposure, estimand, alpha_beta_estimated, cov_estimated,
+    out_bootstrap, out_getResults, iteration, converged.by, objective.function, max.absolute.difference, relative.difference,
+    out_nleqslv, conf.level, optim.method$nleqslv.method
+  )
+  out_data <- normalized_data
+  if (outcome.type == "COMPETING-RISK" || outcome.type == "SURVIVAL" || outcome.type == "BINOMIAL") {
     normalized_data$influence.function <- out_calculateCov$influence.function
     normalized_data$ip.weight <- out_getResults$ip.weight
     normalized_data$potential.CIFs <- out_getResults$potential.CIFs
-    out_data <- normalized_data
   }
   out <- list(summary=out_summary, coefficient=alpha_beta_estimated, cov=cov_estimated, bootstrap=out_bootstrap, diagnosis.statistics=out_data, optimization.info=trace_df)
   return(out)

@@ -179,23 +179,15 @@ calculateCov <- function(objget_results, estimand, prob.bound)
 }
 
 calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
-  x_a <- as.matrix(x_a)
   n <- nrow(x_l)
-  if (nrow(x_a) != n) stop("Row dimension of x_a and x_l must match.")
-  K <- if (!is.null(estimand$exposure.levels)) estimand$exposure.levels else (ncol(x_a) + 1L)
+  K <- estimand$exposure.levels
   if (ncol(potential.CIFs) != 2 * K) stop("Column dimension of potential.CIFs is not 2 * K.")
 
   seq_n <- seq_len(n)
   idx <- max.col(cbind(0, x_a), ties.method = "first")
 
-  clamp_prob <- function(x) {
-    x <- pmax(x, prob.bound)
-    x <- pmin(x, 1 - prob.bound)
-    return(x)
-  }
-
-  CIF1_mat <- clamp_prob(potential.CIFs[, seq_len(K), drop = FALSE])
-  CIF2_mat <- clamp_prob(potential.CIFs[, K + seq_len(K), drop = FALSE])
+  CIF1_mat <- clampP(potential.CIFs[, seq_len(K), drop = FALSE], prob.bound)
+  CIF2_mat <- clampP(potential.CIFs[, K + seq_len(K), drop = FALSE], prob.bound)
   survival_mat <- pmax(1 - CIF1_mat - CIF2_mat, prob.bound)
 
   CIF1_sel <- CIF1_mat[cbind(seq_n, idx)]
@@ -203,14 +195,14 @@ calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   survival_sel <- survival_mat[cbind(seq_n, idx)]
 
   calculateA <- function(effect.measure, CIFs_selected) {
-    CIFs_selected <- clamp_prob(CIFs_selected)
+    CIFs_selected <- clampP(CIFs_selected, prob.bound)
     if (effect.measure == "RR") {
       return(1 / CIFs_selected)
     } else if (effect.measure == "OR") {
-      denom <- clamp_prob(1 - CIFs_selected)
+      denom <- clampP(1 - CIFs_selected, prob.bound)
       return(1 / CIFs_selected + 1 / denom)
     } else if (effect.measure == "SHR") {
-      denom <- clamp_prob(1 - CIFs_selected)
+      denom <- clampP(1 - CIFs_selected, prob.bound)
       tmp1 <- -1 / denom
       tmp2 <- log(denom)
       return(tmp1 / tmp2)
@@ -388,33 +380,25 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
 }
 
 calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
-  x_a <- as.matrix(x_a)
   n <- nrow(x_l)
-  if (nrow(x_a) != n) stop("Row dimension of x_a and x_l must match.")
-  K <- if (!is.null(estimand$exposure.levels)) estimand$exposure.levels else (ncol(x_a) + 1L)
+  K <- estimand$exposure.levels
   if (ncol(potential.CIFs) < K) stop("Column dimension of potential.CIFs is insufficient for the number of exposure levels.")
 
   seq_n <- seq_len(n)
   idx <- max.col(cbind(0, x_a), ties.method = "first")
 
-  clamp_prob <- function(x) {
-    x <- pmax(x, prob.bound)
-    x <- pmin(x, 1 - prob.bound)
-    return(x)
-  }
-
-  CIF_mat <- clamp_prob(potential.CIFs[, seq_len(K), drop = FALSE])
+  CIF_mat <- clampP(potential.CIFs[, seq_len(K), drop = FALSE], prob.bound)
   CIF_sel <- CIF_mat[cbind(seq_n, idx)]
 
   calculateA <- function(effect_measure, CIFs_selected) {
-    CIFs_selected <- clamp_prob(CIFs_selected)
+    CIFs_selected <- clampP(CIFs_selected, prob.bound)
     if (effect_measure == "RR") {
       return(1 / CIFs_selected)
     } else if (effect_measure == "OR") {
-      denom <- clamp_prob(1 - CIFs_selected)
+      denom <- clampP(1 - CIFs_selected, prob.bound)
       return(1 / CIFs_selected + 1 / denom)
     } else if (effect_measure == "SHR") {
-      denom <- clamp_prob(1 - CIFs_selected)
+      denom <- clampP(1 - CIFs_selected, prob.bound)
       tmp1 <- -1 / denom
       tmp2 <- log(denom)
       return(tmp1 / tmp2)

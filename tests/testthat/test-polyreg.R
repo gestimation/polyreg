@@ -9,15 +9,25 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expect_equal(tested, expected)
 })
 
+test_that("polyreg produced expected coefficients and variance covariance matrix for categorical exposure in diabetes.complications", {
+  data(diabetes.complications)
+  output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'strata', data = diabetes.complications, effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C', code.exposure.ref = 1)
+  tested_coefficient <- round(output$coefficient,digit=3)
+  tested_cov <- round(output$cov[1,],digit=3)
+  tested <- as.vector(cbind(tested_coefficient,tested_cov))
+  expected <- c(-2.297, 1.143, -0.197, 1.213, -4.817, 0.132, 1.506, 0.163, 0.040, -0.024, -0.031, -0.025, 0.009, -0.006, -0.006, -0.006)
+  expect_equal(tested, expected)
+})
+
 test_that("polyreg produced expected coefficients and variance covariance matrix when stratified IPCW used", {
   data(diabetes.complications)
-  output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, strata = 'strata', effect.measure1='RR', effect.measure2='RR', time.point=8, outcome.type='C')
+  output <- polyreg(nuisance.model = Event(t,epsilon)~+1, exposure = 'fruitq1', data = diabetes.complications, strata = 'strata', effect.measure1='SHR', effect.measure2='SHR', time.point=8, outcome.type='C')
   tested_coefficient <- round(output$coefficient,digit=3)
   tested_cov <- round(output$cov[1,],digit=3)
   tested <- as.vector(cbind(tested_coefficient,tested_cov))
   #  expected <- c(-1.383, 0.300, -3.991, 0.076, 0.007, -0.005, -0.001, 0.005)
   #  expected <- c(-1.383, 0.300, -3.988, 0.078, 0.007, -0.005, -0.001, 0.005)
-  expected <- c(-1.383, 0.300, -3.988, 0.078, 0.008, -0.005, 0.003, -0.002)
+  expected <- c(-1.383, 0.363, -3.988, 0.081, 0.009, -0.006, 0.004, -0.003)
   expect_equal(tested, expected)
 })
 
