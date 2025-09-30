@@ -306,7 +306,7 @@ createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_prese
   return(data.frame(id = 1:n, t = t, epsilon = epsilon, d = d, w = w, strata = strata, subset=subset))
 }
 
-normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type) {
+normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type, exposure.levels) {
   mf <- model.frame(formula, data)
   Y <- model.extract(mf, "response")
   response_term <- formula[[2]]
@@ -318,6 +318,7 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
   }
   normalized_data <- data
   range_vector <- 1
+  exposure.range <- rep(1, exposure.levels-1)
   if (should.normalize.covariate == TRUE & length(covariate_cols)>0) {
     for (col in covariate_cols) {
       x <- normalized_data[[col]]
@@ -326,19 +327,19 @@ normalizeCovariate <- function(formula, data, should.normalize.covariate, outcom
       range_vector <- cbind(range_vector, range)
     }
     if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
-      range_vector <- cbind(range_vector)
+      range_vector <- NULL
     } else if (outcome.type == "SURVIVAL" || outcome.type == "BINOMIAL") {
-      range_vector <- cbind(range_vector,1)
+      range_vector <- cbind(range_vector,exposure.range)
     } else {
-      range_vector <- cbind(range_vector,1,range_vector,1)
+      range_vector <- cbind(range_vector,exposure.range,range_vector,exposure.range)
     }
   } else {
     if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
-      range_vector <- rep(1, (length(covariate_cols)+1))
+      range_vector <- NULL
     } else if (outcome.type == "SURVIVAL" || outcome.type == "BINOMIAL") {
-      range_vector <- rep(1, (length(covariate_cols)+2))
+      range_vector <- rep(1, (length(covariate_cols)+exposure.levels))
     } else {
-      range_vector <- rep(1, (2*length(covariate_cols)+4))
+      range_vector <- rep(1, (2*length(covariate_cols)+2*exposure.levels))
     }
   }
   n_covariate <- length(covariate_cols)

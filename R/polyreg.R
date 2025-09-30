@@ -173,7 +173,7 @@ polyreg <- function(
   report.boot.conf <- ci$report.boot.conf
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
-  out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
+  out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type, ci$out_defineExposureDesign$exposure.levels)
   normalized_data <- out_normalizeCovariate$normalized_data
   tp <- read_time.point(nuisance.model, normalized_data, outcome.type, code.censoring, time.point)
 

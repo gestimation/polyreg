@@ -73,6 +73,7 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   expect_equal(tested, expected)
 })
 
+
 test_that("polyreg produced expected coefficients and variance covariance matrix from survival data in men", {
   data(diabetes.complications)
   nuisance.model <- Event(t,d)~1
