@@ -182,7 +182,7 @@ checkInput <- function(data, formula, exposure, code.event1, code.event2, code.c
   return(list(report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
 }
 
-read_time.point <- function(formula, data, outcome.type, code.censoring, time.point) {
+read_time.point <- function(formula, data, x_a, outcome.type, code.censoring, should.terminate.time.point, time.point) {
 #  read_time.point <- function(formula, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point) {
     if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
     if (is.null(time.point) || !length(time.point)) stop("time.point is required when outcome.type is COMPETING-RISK or SURVIVAL.")
@@ -205,11 +205,31 @@ read_time.point <- function(formula, data, outcome.type, code.censoring, time.po
     epsilon <- Y[, 2]
     tp <- t[epsilon != code.censoring]
     tp <- sort(unique(tp[is.finite(tp)]))
+    if (should.terminate.time.point) {
+      valid <- is.finite(t) & !is.na(epsilon) & (epsilon != code.censoring)
+      if (ncol(x_a) <= 1L) {
+        idx0 <- valid & (x_a[, 1L] == 0)
+        idx1 <- valid & (x_a[, 1L] != 0)
+        maxs <- c(if (any(idx0)) max(t[idx0]) else Inf,
+                  if (any(idx1)) max(t[idx1]) else Inf)
+        cutoff <- min(maxs)
+      } else {
+        rs   <- rowSums(x_a != 0, na.rm = TRUE)
+        m0   <- if (any(valid & rs == 0L)) max(t[valid & rs == 0L]) else Inf
+        mj   <- vapply(seq_len(ncol(x_a)), function(j) {
+          idx <- valid & (x_a[, j] != 0)
+          if (any(idx)) max(t[idx]) else Inf
+        }, numeric(1))
+        cutoff <- min(c(m0, mj))
+      }
+      tp     <- tp[tp <= cutoff]
+    }
     return(tp)
   } else {
     return(time.point)
   }
 }
+
 
 createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {
   if (!is.null(subset.condition)) {
@@ -428,7 +448,7 @@ fcif <- function(cif,rr,type=c("cif","cloglog","logistic")) {
   return(mcif)
 }
 
-simRR <- function(n,lrr1,lrr2,cens=NULL,type1=c("cif","cloglog","logistic"),type2=c("cif","cloglog","logistic")) {
+simRR <- function(n,cif1,cif2,lrr1,lrr2,cens=NULL,type1=c("cif","cloglog","logistic"),type2=c("cif","cloglog","logistic")) {
   A <- rbinom(n,1,0.5)
   L <- rbinom(n,1,0.5)
   rr1 <- exp(cbind(A,L) %*% lrr1)

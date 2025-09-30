@@ -86,6 +86,7 @@
 #'   the optimisation. Defaults to \code{NULL}.
 #' @param should.normalize.covariate Logical indicating whether covariates should
 #'   be centred and scaled prior to optimisation. Defaults to \code{TRUE}.
+#' @param should.terminate.time.point Logical
 #' @param prob.bound Numeric lower bound used to truncate probabilities away
 #'   from 0 and 1. Defaults to \code{1e-5}.
 #' @importFrom nleqslv nleqslv
@@ -154,6 +155,7 @@ polyreg <- function(
     optim.parameter13 = 0.5,
     data.initial.values = NULL,
     should.normalize.covariate = TRUE,
+    should.terminate.time.point = TRUE,
     prob.bound = 1e-5
 ) {
 
@@ -169,7 +171,7 @@ polyreg <- function(
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
   out_normalizeCovariate <- normalizeCovariate(nuisance.model, data, should.normalize.covariate, outcome.type)
   normalized_data <- out_normalizeCovariate$normalized_data
-  tp <- read_time.point(nuisance.model, normalized_data, outcome.type, code.censoring, time.point)
+  tp <- read_time.point(nuisance.model, normalized_data, ci$out_defineExposureDesign$x_a, outcome.type, code.censoring, should.terminate.time.point, time.point)
 
   estimand <- list(
     effect.measure1=cs$effect.measure1,
@@ -262,7 +264,7 @@ polyreg <- function(
       prob.bound = prob.bound, initial.CIFs = initial.CIFs
     )
       estimating_equation_p <- function(p) call_and_capture(
-      estimating_equation_proportional_old,
+      estimating_equation_proportional,
       formula = nuisance.model, data = normalized_data, exposure = exposure,
       ip.weight.matrix = ip.weight.matrix, alpha_beta = p, estimand = estimand,
       optim.method = optim.method, prob.bound = prob.bound,
