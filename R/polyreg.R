@@ -42,6 +42,9 @@
 #'   \code{FALSE}.
 #' @param report.optim.convergence Logical; if \code{TRUE}, optimisation
 #'   convergence summaries are returned. Defaults to \code{FALSE}.
+#' @param report.sandwich.conf Logical or \code{NULL}. When \code{TRUE}, confidence
+#'   intervals based on sandwich variance are computed. When \code{FALSE}, they are
+#'   omitted. Defaults to \code{TRUE}.
 #' @param report.boot.conf Logical or \code{NULL}. When \code{TRUE}, bootstrap
 #'   confidence intervals are computed. When \code{FALSE}, they are omitted. If
 #'   \code{NULL}, the function chooses based on \code{outcome.type}.
@@ -134,6 +137,7 @@ polyreg <- function(
     conf.level = 0.95,
     report.nuisance.parameter = FALSE,
     report.optim.convergence = FALSE,
+    report.sandwich.conf = TRUE,
     report.boot.conf = NULL,
     boot.bca = TRUE,
     boot.parameter1 = 200,
@@ -163,7 +167,9 @@ polyreg <- function(
   computation.time0 <- proc.time()
   cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
   outcome.type <- cs$outcome.type
-  ci <- checkInput(data, nuisance.model, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.boot.conf, nleqslv.method)
+  ci <- checkInput(data, nuisance.model, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.sandwich.conf, report.boot.conf, nleqslv.method, should.normalize.covariate)
+  should.normalize.covariate <- ci$should.normalize.covariate
+  report.sandwich.conf <- ci$report.sandwich.conf
   report.boot.conf <- ci$report.boot.conf
 
   data <- createAnalysisDataset(formula=nuisance.model, data=data, other.variables.analyzed=c(exposure, strata), subset.condition=subset.condition, na.action=na.action)
@@ -406,7 +412,7 @@ polyreg <- function(
   #######################################################################################################
   normalizeEstimate <- function(
     outcome.type,
-    report.boot.conf,
+    report.sandwich.conf,
     should.normalize.covariate,
     current_params,
     out_getResults,
@@ -414,23 +420,22 @@ polyreg <- function(
     prob.bound,
     out_normalizeCovariate
   ) {
-    exclude_cov <- report.boot.conf == TRUE || outcome.type %in% c("PROPORTIONAL", "POLY-PROPORTIONAL")
-
-    if (exclude_cov) {
+    if (report.sandwich.conf == FALSE) {
       alpha_beta_estimated <- if (should.normalize.covariate) {
-        (1 / as.vector(out_normalizeCovariate$range)) * current_params
+        adj <- 1 / as.vector(out_normalizeCovariate$range)
+        if (length(adj) != length(current_params)) stop("Length of adj (range) must match length of current_params.")
+        adj * current_params
       } else {
         current_params
       }
       return(list(alpha_beta_estimated = alpha_beta_estimated, cov_estimated = NULL))
     }
-    if (should.normalize.covariate) {
+    if (should.normalize.covariate) { #本来はoutcome.typeで分岐が必要
       adj <- 1 / as.vector(out_normalizeCovariate$range)
       if (length(adj) != length(current_params)) stop("Length of adj (range) must match length of current_params.")
       alpha_beta_estimated <- adj * current_params
       adj_matrix <- diag(adj, length(adj))
       cov_estimated <- adj_matrix %*% out_calculateCov$cov_estimated %*% adj_matrix
-      #cov_estimated <- NULL
     } else {
       alpha_beta_estimated <- current_params
       cov_estimated <- out_calculateCov$cov_estimated
@@ -441,7 +446,6 @@ polyreg <- function(
   out_calculateCov <- switch(
     outcome.type,
     "COMPETING-RISK" = calculateCov(out_getResults, estimand, prob.bound),
-    #    "COMPETING-RISK" = NULL,
     "SURVIVAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "BINOMIAL" = calculateCovSurvival(out_getResults, estimand, prob.bound),
     "PROPORTIONAL" = NULL,
@@ -450,7 +454,7 @@ polyreg <- function(
   )
   out_normalizeEstimate <- normalizeEstimate(
     outcome.type = outcome.type,
-    report.boot.conf = report.boot.conf,
+    report.sandwich.conf = report.sandwich.conf,
     should.normalize.covariate = should.normalize.covariate,
     current_params = current_params,
     out_getResults = out_getResults,

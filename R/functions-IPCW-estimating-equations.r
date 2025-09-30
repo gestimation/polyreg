@@ -444,10 +444,10 @@ estimating_equation_proportional <- function(
   i_time <- 0
   alpha_beta_i <- rep(NA, index.vector[7])
   for (specific.time in time.point) {
-    i_time <- i_time + 1
-    i_para <- index.vector[1]*(i_time-1)+1
-    alpha_beta_i[seq_len(index.vector[1])]                 <- alpha_beta[seq.int(i_para, i_para+index.vector[1]-1)]
-    alpha_beta_i[seq.int(index.vector[2], index.vector[3])] <- alpha_beta[index.vector[8]/2]
+    i_time <- i_time + 1                    #時間のインデックス
+    i_para <- index.vector[1]*(i_time-1)+1  #パラメータのうち時間依存性切片項のインデックス
+    alpha_beta_i[seq_len(index.vector[1])]                  <- alpha_beta[seq.int(i_para, i_para+index.vector[1]-1)]  #時間依存性切片項から共変量回帰係数までのインデックス
+    alpha_beta_i[seq.int(index.vector[2], index.vector[3])] <- alpha_beta[index.vector[8]/2] #パラメータのうち曝露のインデックス, 曝露分類未対応
 
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
