@@ -136,8 +136,8 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   wy_1 <- w11 * (y_1 - ey_1) + w12 * (y_2 - ey_2)
   wy_2 <- w12 * (y_1 - ey_1) + w22 * (y_2 - ey_2)
   x_la <- cbind(x_l, x_a)
-#  AB1 <- score[1:n, 1:index.vector[2]]
-#  AB2 <- score[(n + 1):(2 * n), index.vector[3]:index.vector[5]]
+  #AB1 <- score[1:n, 1:index.vector[2]]
+  #AB2 <- score[(n + 1):(2 * n), index.vector[3]:index.vector[5]]
   AB1 <- score[1:n, 1:index.vector[3]]
   AB2 <- score[(n + 1):(2 * n), index.vector[4]:index.vector[7]]
   for (i_para in 1:index.vector[2]) {
@@ -202,14 +202,14 @@ calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   CIF2_sel <- CIF2_mat[cbind(seq_n, idx)]
   survival_sel <- survival_mat[cbind(seq_n, idx)]
 
-  calculateA <- function(effect_measure, CIFs_selected) {
+  calculateA <- function(effect.measure, CIFs_selected) {
     CIFs_selected <- clamp_prob(CIFs_selected)
-    if (effect_measure == "RR") {
+    if (effect.measure == "RR") {
       return(1 / CIFs_selected)
-    } else if (effect_measure == "OR") {
+    } else if (effect.measure == "OR") {
       denom <- clamp_prob(1 - CIFs_selected)
       return(1 / CIFs_selected + 1 / denom)
-    } else if (effect_measure == "SHR") {
+    } else if (effect.measure == "SHR") {
       denom <- clamp_prob(1 - CIFs_selected)
       tmp1 <- -1 / denom
       tmp2 <- log(denom)
