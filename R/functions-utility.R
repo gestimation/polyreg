@@ -3,10 +3,10 @@ Surv <- function(time, event) {
     stop("Must have a time argument")
   if (!is.numeric(time))
     stop("Time variable is not numeric")
-  if (any(is.na(time)))
-    warning("Invalid time variable. NA values included")
-  #  if (any(time<0))
-  #    warning("Invalid time variable. Non-negative values included")
+  #if (any(is.na(time)))
+  #  warning("Invalid time variable. NA values included")
+  #if (any(time<0))
+  #  warning("Invalid time variable. Non-negative values included")
   if (length(event) != length(time))
     stop("Time and event variables are different lengths")
   if (missing(event))
@@ -49,10 +49,10 @@ Event <- function(time, event) {
     stop("A time argument is required")
   if (!is.numeric(time))
     stop("Time variable is not numeric")
-  if (any(is.na(time)))
-    warning("Invalid time variable. NA values included")
-  #  if (any(time<0))
-  #    warning("Invalid time variable. Non-negative values included")
+  #if (any(is.na(time)))
+  #  warning("Invalid time variable. NA values included")
+  #if (any(time<0))
+  #  warning("Invalid time variable. Non-negative values included")
   if (length(event) != length(time))
     stop("Time and event variables are different lengths")
   if (missing(event))
@@ -61,7 +61,7 @@ Event <- function(time, event) {
     if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- event
-  } else if (is.is.logical(event)) {
+  } else if (is.logical(event)) {
     if (any(is.na(event)))
       warning("Invalid event variable. NA values included")
     status <- as.numeric(event)
@@ -95,7 +95,6 @@ defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefi
   if (!exposure %in% names(data)) {
     stop("exposure = '", exposure, "' is not found in data.")
   }
-
   a_ <- data[[exposure]]
   a_ <- factor(a_)
   a_ <- base::droplevels(a_)
@@ -112,7 +111,7 @@ defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefi
       ref_lab <- NULL
     }
   }
-  if (is.null(ref_lab)) ref_lab <- lev[1L]
+  if (is.null(ref_lab)) ref_lab <- lev[1]
   if (K < 1 || K == 1) stop("Exposure has only one level (", lev, ") or no valid levels. Effect estimation is not possible.")
   X <- stats::model.matrix(~ a_)[, -1, drop = FALSE]
   cn <- colnames(X)
@@ -126,7 +125,7 @@ defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefi
   ))
 }
 
-checkInput <- function(data, formula, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.boot.conf, nleqslv.method) {
+checkInput <- function(data, formula, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.sandwich.conf, report.boot.conf, nleqslv.method, should.normalize.covariate) {
   cl <- match.call()
   if (missing(formula)) stop("A formula argument is required")
   mf <- match.call(expand.dots = TRUE)[1:3]
@@ -170,16 +169,32 @@ checkInput <- function(data, formula, exposure, code.event1, code.event2, code.c
 
   if (!is.numeric(conf.level) || length(conf.level) != 1 || conf.level <= 0 || conf.level >= 1)
     stop("conf.level must be a single number between 0 and 1")
-  if (is.null(report.boot.conf) & (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL')) {
-    report.boot.conf.corrected <- TRUE
-  } else if (is.null(report.boot.conf)) {
-    report.boot.conf.corrected <- FALSE
+
+  if (outcome.type == "PROPORTIONAL" | outcome.type == "POLY-PROPORTIONAL") {
+    should.normalize.covariate.corrected <- FALSE
+    report.sandwich.conf.corrected <- FALSE
+    if (is.null(report.boot.conf)) {
+      report.boot.conf.corrected <- TRUE
+    } else {
+      report.boot.conf.corrected <- report.boot.conf
+    }
   } else {
-    report.boot.conf.corrected <- report.boot.conf
+    should.normalize.covariate.corrected <- should.normalize.covariate
+    if (is.null(report.boot.conf)) {
+      report.boot.conf.corrected <- FALSE
+    } else {
+      report.boot.conf.corrected <- report.boot.conf
+    }
+    if (report.boot.conf == FALSE || is.null(report.boot.conf)) {
+      report.sandwich.conf.corrected <- report.sandwich.conf
+    } else {
+      report.sandwich.conf.corrected <- FALSE
+    }
   }
+
   outer_choices <- c("nleqslv","Newton","Broyden")
   nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
-  return(list(report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
+  return(list(should.normalize.covariate = should.normalize.covariate.corrected, report.sandwich.conf = report.sandwich.conf.corrected, report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
 }
 
 read_time.point <- function(formula, data, x_a, outcome.type, code.censoring, should.terminate.time.point, time.point) {
@@ -311,47 +326,46 @@ createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_prese
   return(data.frame(id = 1:n, t = t, epsilon = epsilon, d = d, w = w, strata = strata, subset=subset))
 }
 
-normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type) {
+normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type, exposure.levels) {
   mf <- model.frame(formula, data)
   Y <- model.extract(mf, "response")
   response_term <- formula[[2]]
-  if (inherits(mf[[1]], "Surv") | inherits(mf[[1]], "Event")) {
+  if (inherits(mf[[1]], "Surv") || inherits(mf[[1]], "Event")) {
     response_vars <- all.vars(response_term)
-    covariate_cols <- setdiff(all.vars(formula), response_vars)  # Remove time and event
+    covariate_cols <- setdiff(all.vars(formula), response_vars)
   } else {
-    covariate_cols <- all.vars(formula)[-1]  # Exclude the response variable
+    covariate_cols <- all.vars(formula)[-1]
   }
   normalized_data <- data
   range_vector <- 1
+  exposure.range <- rep(1, exposure.levels-1)
   if (should.normalize.covariate == TRUE & length(covariate_cols)>0) {
     for (col in covariate_cols) {
       x <- normalized_data[[col]]
       range <- max(x)-min(x)
       normalized_data[[col]] <- x/range
-      range_vector <- cbind(range_vector,range)
+      range_vector <- cbind(range_vector, range)
     }
-    if (outcome.type == 'PROPORTIONAL') {
-      range_vector <- cbind(range_vector)
-    } else if (outcome.type == 'SURVIVAL' | outcome.type == 'BINOMIAL') {
-      range_vector <- cbind(range_vector,1)
+    if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
+      range_vector <- NULL
+    } else if (outcome.type == "SURVIVAL" || outcome.type == "BINOMIAL") {
+      range_vector <- cbind(range_vector,exposure.range)
     } else {
-      range_vector <- cbind(range_vector,1,range_vector,1)
+      range_vector <- cbind(range_vector,exposure.range,range_vector,exposure.range)
     }
   } else {
-    if (outcome.type == "PROPORTIONAL") {
-      range_vector <- rep(1, (length(covariate_cols)+1))
-    } else if (outcome.type == "SURVIVAL" | outcome.type == "BINOMIAL") {
-      range_vector <- rep(1, (length(covariate_cols)+2))
+    if (outcome.type == "PROPORTIONAL" || outcome.type == "POLY-PROPORTIONAL") {
+      range_vector <- NULL
+    } else if (outcome.type == "SURVIVAL" || outcome.type == "BINOMIAL") {
+      range_vector <- rep(1, (length(covariate_cols)+exposure.levels))
     } else {
-      range_vector <- rep(1, (2*length(covariate_cols)+4))
+      range_vector <- rep(1, (2*length(covariate_cols)+2*exposure.levels))
     }
   }
   n_covariate <- length(covariate_cols)
   out <- list(normalized_data=normalized_data, range=range_vector, n_covariate=n_covariate, n=nrow(data))
   return(out)
 }
-
-
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {

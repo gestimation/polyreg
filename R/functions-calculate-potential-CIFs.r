@@ -10,6 +10,123 @@ residuals_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, pro
   p0 <- pmax(1 - p1 - p2, prob.bound)
   logp0 <- log(p0)
 
+  if (K < 2) stop("exposure.levels must be at least 2.")
+
+  r <- numeric(4 * (K - 1))
+  for (k in 2:K) {
+    idx <- k - 1
+    r[idx] <- alpha1 - clog_CIFs[i1[1]] - clog_CIFs[i1[k]] + logp0[1] + logp0[k]
+    r[(K - 1) + idx] <- alpha2 - clog_CIFs[i2[1]] - clog_CIFs[i2[k]] + logp0[1] + logp0[k]
+  }
+  calculateResidualBeta <- function(effect.measure, pref, pL, clogpref, clogpL, beta) {
+    if (length(beta) != length(pL) || length(beta) != length(clogpL)) {
+      stop("beta, pL, and clogpL must have the same length.")
+    }
+    if (effect.measure == "RR") {
+      beta - clogpL + clogpref
+    } else if (effect.measure == "OR") {
+      beta - (log(pL) - log1p(-pL)) + (log(pref) - log1p(-pref))
+    } else if (effect.measure == "SHR") {
+      Bi <- log1p(-pref)
+      Bj <- log1p(-pL)
+      exp(beta) - (Bj / Bi)
+    } else stop("effect.measure must be RR, OR, or SHR.")
+  }
+  beta_idx1 <- (2 * (K - 1) + 1):(3 * (K - 1))
+  beta_idx2 <- (3 * (K - 1) + 1):(4 * (K - 1))
+  r[beta_idx1] <- calculateResidualBeta(estimand$effect.measure1, p1[1], p1[2:K], clog_CIFs[i1[1]], clog_CIFs[i1[2:K]], beta1)
+  r[beta_idx2] <- calculateResidualBeta(estimand$effect.measure2, p2[1], p2[2:K], clog_CIFs[i2[1]], clog_CIFs[i2[2:K]], beta2)
+  return(r)
+}
+
+jacobian_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
+  K <- estimand$exposure.levels
+  clog_CIFs <- clampLogP(as.numeric(log_CIFs))
+  i1 <- 1:K
+  i2 <- (K+1):(2*K)
+  p1 <- exp(clog_CIFs[i1])
+  p2 <- exp(clog_CIFs[i2])
+  p0 <- pmax(1 - p1 - p2, prob.bound)
+
+  dlogrem_dlp1 <- -p1/p0
+  dlogrem_dlp2 <- -p2/p0
+
+  if (K < 2) stop("exposure.levels must be at least 2.")
+
+  J <- matrix(0.0, nrow = 4 * (K - 1), ncol = 2*K)
+  for (k in 2:K) {
+    r1 <- k - 1
+    J[r1,   i1[1]] <- -1 + dlogrem_dlp1[1]
+    J[r1,   i2[1]] <-      dlogrem_dlp2[1]
+    J[r1,   i1[k]] <- -1 + dlogrem_dlp1[k]
+    J[r1,   i2[k]] <-      dlogrem_dlp2[k]
+
+    r2 <- (K - 1) + (k - 1)
+    J[r2,   i2[1]] <- -1 + dlogrem_dlp2[1]
+    J[r2,   i1[1]] <-      dlogrem_dlp1[1]
+    J[r2,   i2[k]] <- -1 + dlogrem_dlp2[k]
+    J[r2,   i1[k]] <-      dlogrem_dlp1[k]
+  }
+
+  row_beta1_start <- 2 * (K - 1) + 1
+  row_beta2_start <- 3 * (K - 1) + 1
+  idx_L1 <- i1[2:K]
+  idx_L2 <- i2[2:K]
+  p1_L <- p1[2:K]
+  p2_L <- p2[2:K]
+
+  for (k in seq_along(idx_L1)) {
+    row <- row_beta1_start + k - 1
+    idx_L <- idx_L1[k]
+    if (estimand$effect.measure1 == "RR") {
+      J[row, i1[1]] <- 1
+      J[row, idx_L] <- -1
+    } else if (estimand$effect.measure1 == "OR") {
+      pl <- p1_L[k]
+      J[row, i1[1]] <- 1 + p1[1] / (1 - p1[1])
+      J[row, idx_L] <- -1 - pl / (1 - pl)
+    } else if (estimand$effect.measure1 == "SHR") {
+      Bi <- log1p(-p1[1])
+      Bj <- log1p(-p1_L[k])
+      pl <- p1_L[k]
+      J[row, i1[1]] <- -Bj * p1[1] / ((1 - p1[1]) * Bi^2)
+      J[row, idx_L] <- pl / ((1 - pl) * Bi)
+    } else stop("effect.measure must be RR, OR, or SHR.")
+  }
+
+  for (k in seq_along(idx_L2)) {
+    row <- row_beta2_start + k - 1
+    idx_L <- idx_L2[k]
+    if (estimand$effect.measure2 == "RR") {
+      J[row, i2[1]] <- 1
+      J[row, idx_L] <- -1
+    } else if (estimand$effect.measure2 == "OR") {
+      pl <- p2_L[k]
+      J[row, i2[1]] <- 1 + p2[1] / (1 - p2[1])
+      J[row, idx_L] <- -1 - pl / (1 - pl)
+    } else if (estimand$effect.measure2 == "SHR") {
+      Bi <- log1p(-p2[1])
+      Bj <- log1p(-p2_L[k])
+      pl <- p2_L[k]
+      J[row, i2[1]] <- -Bj * p2[1] / ((1 - p2[1]) * Bi^2)
+      J[row, idx_L] <- pl / ((1 - pl) * Bi)
+    } else stop("effect.measure must be RR, OR, or SHR.")
+  }
+  return(J)
+}
+
+residuals_CIFs_old <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
+  K <- estimand$exposure.levels
+  clog_CIFs <- clampLogP(as.numeric(log_CIFs))
+  if (length(clog_CIFs) != 2*K || length(clog_CIFs) %% 2 != 0) stop("log_CIFs length must be even (2K).")
+
+  i1 <- 1:K                      # indices for event1 block
+  i2 <- (K+1):(2*K)              # indices for event2 block
+  p1 <- exp(clog_CIFs[i1])
+  p2 <- exp(clog_CIFs[i2])
+  p0 <- pmax(1 - p1 - p2, prob.bound)
+  logp0 <- log(p0)
+
   r <- numeric(2*K)
   r[1] <- alpha1 - clog_CIFs[i1[1]] - clog_CIFs[i1[2]] + logp0[1] + logp0[2]
   r[K] <- alpha2 - clog_CIFs[i2[1]] - clog_CIFs[i2[2]] + logp0[1] + logp0[2]
@@ -33,7 +150,7 @@ residuals_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, pro
   return(r)
 }
 
-jacobian_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
+jacobian_CIFs_old <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
   K <- estimand$exposure.levels
   clog_CIFs <- clampLogP(as.numeric(log_CIFs))
   i1 <- 1:K

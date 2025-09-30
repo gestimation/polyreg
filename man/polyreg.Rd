@@ -46,87 +46,142 @@ polyreg(
 )
 }
 \arguments{
-\item{nuisance.model}{A \code{\link[stats]{formula}} describing the outcome and nuisance covariates, excluding the exposure of interest.}
+\item{nuisance.model}{A \code{\link[stats]{formula}} describing the outcome and
+nuisance covariates, excluding the exposure of interest.}
 
-\item{exposure}{A character string giving the name of the binary exposure variable in \code{data}.}
+\item{exposure}{A character string giving the name of the binary exposure
+variable in \code{data}.}
 
-\item{strata}{Optional character string with the name of the stratification variable used to adjust for dependent censoring. Defaults to \code{NULL}.}
+\item{strata}{Optional character string with the name of the stratification
+variable used to adjust for dependent censoring. Defaults to \code{NULL}.}
 
-\item{data}{A data frame containing the outcome, exposure and nuisance covariates referenced by \code{nuisance.model}.}
+\item{data}{A data frame containing the outcome, exposure and nuisance
+covariates referenced by \code{nuisance.model}.}
 
-\item{subset.condition}{Optional expression (as a character string) defining a subset of \code{data} to analyse. Defaults to \code{NULL}.}
+\item{subset.condition}{Optional expression (as a character string) defining a
+subset of \code{data} to analyse. Defaults to \code{NULL}.}
 
-\item{na.action}{A function specifying the action to take on missing values. The default is \code{\link[stats]{na.omit}}.}
+\item{na.action}{A function specifying the action to take on missing values.
+The default is \code{\link[stats]{na.omit}}.}
 
-\item{code.event1}{Integer code corresponding to the first event of interest. Defaults to \code{1}.}
+\item{code.event1}{Integer code corresponding to the first event of interest.
+Defaults to \code{1}.}
 
-\item{code.event2}{Integer code corresponding to the competing event. Defaults to \code{2}.}
+\item{code.event2}{Integer code corresponding to the competing event. Defaults
+to \code{2}.}
 
-\item{code.censoring}{Integer code representing censoring. Defaults to \code{0}.}
+\item{code.censoring}{Integer code representing censoring. Defaults to
+\code{0}.}
 
-\item{code.exposure.ref}{Integer code identifying the reference exposure category. Defaults to \code{0}.}
+\item{code.exposure.ref}{Integer code identifying the reference exposure
+category. Defaults to \code{0}.}
 
-\item{effect.measure1}{Character string specifying the effect measure for the primary event. Supported values are \code{"RR"}, \code{"OR"} and \code{"SHR"}.}
+\item{effect.measure1}{Character string specifying the effect measure for the
+primary event. Supported values are \code{"RR"}, \code{"OR"} and
+\code{"SHR"}.}
 
-\item{effect.measure2}{Character string specifying the effect measure for the competing event. Supported values are \code{"RR"}, \code{"OR"} and \code{"SHR"}.}
+\item{effect.measure2}{Character string specifying the effect measure for the
+competing event. Supported values are \code{"RR"}, \code{"OR"} and
+\code{"SHR"}.}
 
-\item{time.point}{Numeric time point at which the exposure effect is evaluated. Required for survival and competing risk analyses.}
+\item{time.point}{Numeric time point at which the exposure effect is
+evaluated. Required for survival and competing risk analyses.}
 
-\item{outcome.type}{Character string selecting the outcome type. Valid values are \code{"COMPETING-RISK"}, \code{"SURVIVAL"}, \code{"BINOMIAL"}, \code{"PROPORTIONAL"} and \code{"POLY-PROPORTIONAL"}. Defaults to \code{"COMPETING-RISK"}.}
+\item{outcome.type}{Character string selecting the outcome type. Valid values
+are \code{"COMPETING-RISK"}, \code{"SURVIVAL"}, \code{"BINOMIAL"},
+\code{"PROPORTIONAL"} and \code{"POLY-PROPORTIONAL"}. Defaults to
+\code{"COMPETING-RISK"}.}
 
-\item{conf.level}{Confidence level for Wald-type intervals. Defaults to \code{0.95}.}
+\item{conf.level}{Confidence level for Wald-type intervals. Defaults to
+\code{0.95}.}
 
-\item{report.nuisance.parameter}{Logical; if \code{TRUE}, the returned object includes estimates of the nuisance model parameters. Defaults to \code{FALSE}.}
+\item{report.nuisance.parameter}{Logical; if \code{TRUE}, the returned object
+includes estimates of the nuisance model parameters. Defaults to
+\code{FALSE}.}
 
-\item{report.optim.convergence}{Logical; if \code{TRUE}, optimisation convergence summaries are returned. Defaults to \code{FALSE}.}
+\item{report.optim.convergence}{Logical; if \code{TRUE}, optimisation
+convergence summaries are returned. Defaults to \code{FALSE}.}
 
-\item{report.boot.conf}{Logical or \code{NULL}. When \code{TRUE}, bootstrap confidence intervals are computed. When \code{FALSE}, they are omitted. If \code{NULL}, the function chooses based on \code{outcome.type}.}
+\item{report.boot.conf}{Logical or \code{NULL}. When \code{TRUE}, bootstrap
+confidence intervals are computed. When \code{FALSE}, they are omitted. If
+\code{NULL}, the function chooses based on \code{outcome.type}.}
 
-\item{boot.bca}{Logical indicating the bootstrap confidence interval method. Use \code{TRUE} for bias-corrected and accelerated intervals or \code{FALSE} for the normal approximation.}
+\item{boot.bca}{Logical indicating the bootstrap confidence interval method.
+Use \code{TRUE} for bias-corrected and accelerated intervals or \code{FALSE}
+for the normal approximation.}
 
-\item{boot.parameter1}{Integer giving the number of bootstrap replications. Defaults to \code{200}.}
+\item{boot.parameter1}{Integer giving the number of bootstrap replications.
+Defaults to \code{200}.}
 
-\item{boot.parameter2}{Optional numeric seed used when resampling during bootstrap inference.}
+\item{boot.parameter2}{Optional numeric seed used when resampling during
+bootstrap inference.}
 
-\item{nleqslv.method}{Character string defining the solver used by \code{\link[nleqslv]{nleqslv}}. Available choices include \code{"nleqslv"}, \code{"Broyden"}, \code{"Newton"}, \code{"optim"}, \code{"BFGS"} and \code{"SANN"}.}
+\item{nleqslv.method}{Character string defining the solver used by
+\code{\link[nleqslv]{nleqslv}}. Available choices include \code{"nleqslv"},
+\code{"Broyden"}, \code{"Newton"}, \code{"optim"}, \code{"BFGS"} and
+\code{"SANN"}.}
 
-\item{optim.parameter1}{Numeric tolerance for convergence of the outer loop. Defaults to \code{1e-6}.}
+\item{optim.parameter1}{Numeric tolerance for convergence of the outer loop.
+Defaults to \code{1e-6}.}
 
-\item{optim.parameter2}{Numeric tolerance for convergence of the inner loop. Defaults to \code{1e-6}.}
+\item{optim.parameter2}{Numeric tolerance for convergence of the inner loop.
+Defaults to \code{1e-6}.}
 
-\item{optim.parameter3}{Numeric constraint on the absolute value of parameters. Defaults to \code{100}.}
+\item{optim.parameter3}{Numeric constraint on the absolute value of
+parameters. Defaults to \code{100}.}
 
-\item{optim.parameter4}{Integer maximum number of outer loop iterations. Defaults to \code{50}.}
+\item{optim.parameter4}{Integer maximum number of outer loop iterations.
+Defaults to \code{50}.}
 
-\item{optim.parameter5}{Integer maximum number of \code{nleqslv} iterations per outer iteration. Defaults to \code{50}.}
+\item{optim.parameter5}{Integer maximum number of \code{nleqslv}
+iterations per outer iteration. Defaults to \code{50}.}
 
-\item{optim.parameter6}{Integer maximum number of iterations for the Levenberg-Marquardt routine. Defaults to \code{50}.}
+\item{optim.parameter6}{Integer maximum number of iterations for the
+Levenberg-Marquardt routine. Defaults to \code{50}.}
 
-\item{optim.parameter7}{Numeric convergence tolerance for the Levenberg-Marquardt routine. Defaults to \code{1e-10}.}
+\item{optim.parameter7}{Numeric convergence tolerance for the
+Levenberg-Marquardt routine. Defaults to \code{1e-10}.}
 
-\item{optim.parameter8}{Numeric tolerance for updating the Hessian in the Levenberg-Marquardt routine. Defaults to \code{1e-6}.}
+\item{optim.parameter8}{Numeric tolerance for updating the Hessian in the
+Levenberg-Marquardt routine. Defaults to \code{1e-6}.}
 
-\item{optim.parameter9}{Numeric starting value for the Levenberg-Marquardt damping parameter lambda. Defaults to \code{1e-6}.}
+\item{optim.parameter9}{Numeric starting value for the Levenberg-Marquardt
+damping parameter lambda. Defaults to \code{1e-6}.}
 
-\item{optim.parameter10}{Numeric upper bound for lambda in the Levenberg-Marquardt routine. Defaults to \code{40}.}
+\item{optim.parameter10}{Numeric upper bound for lambda in the
+Levenberg-Marquardt routine. Defaults to \code{40}.}
 
-\item{optim.parameter11}{Numeric lower bound for lambda in the Levenberg-Marquardt routine. Defaults to \code{0.025}.}
+\item{optim.parameter11}{Numeric lower bound for lambda in the
+Levenberg-Marquardt routine. Defaults to \code{0.025}.}
 
-\item{optim.parameter12}{Numeric multiplicative increment applied to lambda when the Levenberg-Marquardt step is successful. Defaults to \code{2}.}
+\item{optim.parameter12}{Numeric multiplicative increment applied to lambda
+when the Levenberg-Marquardt step is successful. Defaults to \code{2}.}
 
-\item{optim.parameter13}{Numeric multiplicative decrement applied to lambda when the Levenberg-Marquardt step is unsuccessful. Defaults to \code{0.5}.}
+\item{optim.parameter13}{Numeric multiplicative decrement applied to lambda
+when the Levenberg-Marquardt step is unsuccessful. Defaults to \code{0.5}.}
 
-\item{data.initial.values}{Optional data frame providing starting values for the optimisation. Defaults to \code{NULL}.}
+\item{data.initial.values}{Optional data frame providing starting values for
+the optimisation. Defaults to \code{NULL}.}
 
-\item{should.normalize.covariate}{Logical indicating whether covariates should be centred and scaled prior to optimisation. Defaults to \code{TRUE}.}
+\item{should.normalize.covariate}{Logical indicating whether covariates should
+be centred and scaled prior to optimisation. Defaults to \code{TRUE}.}
 
-\item{prob.bound}{Numeric lower bound used to truncate probabilities away from 0 and 1. Defaults to \code{1e-5}.}
+\item{prob.bound}{Numeric lower bound used to truncate probabilities away
+from 0 and 1. Defaults to \code{1e-5}.}
 }
 \value{
-A list containing fitted exposure effects and supporting results. The main components include \code{coefficient} (estimated exposure and covariate effects), \code{cov} (their variance-covariance matrix), \code{summary} (a tidy summary table compatible with \code{\link[modelsummary]{msummary}}) and \code{diagnosis.statistics} (inverse probability weights, influence functions and predicted potential outcomes).
+A list containing fitted exposure effects and supporting results. The
+main components include \code{coefficient} (estimated exposure and
+covariate effects), \code{cov} (their variance-covariance matrix),
+\code{summary} (a tidy summary table compatible with
+\code{\link[modelsummary]{msummary}}) and \code{diagnosis.statistics}
+(inverse probability weights, influence functions and predicted potential
+outcomes).
 }
 \description{
-Fits the direct polynomial regression model for a binary exposure under several outcome types, including competing risks, survival and binomial endpoints.
+Fits the direct polynomial regression model for a binary exposure
+under several outcome types, including competing risks, survival and
+binomial endpoints.
 }
 \examples{
 data(diabetes.complications)

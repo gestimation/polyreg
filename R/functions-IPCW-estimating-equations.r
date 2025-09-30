@@ -136,8 +136,10 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   wy_1 <- w11 * (y_1 - ey_1) + w12 * (y_2 - ey_2)
   wy_2 <- w12 * (y_1 - ey_1) + w22 * (y_2 - ey_2)
   x_la <- cbind(x_l, x_a)
-  AB1 <- score[1:n, 1:index.vector[2]]
-  AB2 <- score[(n + 1):(2 * n), index.vector[3]:index.vector[5]]
+  #AB1 <- score[1:n, 1:index.vector[2]]
+  #AB2 <- score[(n + 1):(2 * n), index.vector[3]:index.vector[5]]
+  AB1 <- score[1:n, 1:index.vector[3]]
+  AB2 <- score[(n + 1):(2 * n), index.vector[4]:index.vector[7]]
   for (i_para in 1:index.vector[2]) {
     tmp0 <- x_la[, i_para]
     use <- (t <= estimand$time.point)
@@ -176,7 +178,83 @@ calculateCov <- function(objget_results, estimand, prob.bound)
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 
-calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) { #分類曝露未対応
+calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
+  x_a <- as.matrix(x_a)
+  n <- nrow(x_l)
+  if (nrow(x_a) != n) stop("Row dimension of x_a and x_l must match.")
+  K <- if (!is.null(estimand$exposure.levels)) estimand$exposure.levels else (ncol(x_a) + 1L)
+  if (ncol(potential.CIFs) != 2 * K) stop("Column dimension of potential.CIFs is not 2 * K.")
+
+  seq_n <- seq_len(n)
+  idx <- max.col(cbind(0, x_a), ties.method = "first")
+
+  clamp_prob <- function(x) {
+    x <- pmax(x, prob.bound)
+    x <- pmin(x, 1 - prob.bound)
+    return(x)
+  }
+
+  CIF1_mat <- clamp_prob(potential.CIFs[, seq_len(K), drop = FALSE])
+  CIF2_mat <- clamp_prob(potential.CIFs[, K + seq_len(K), drop = FALSE])
+  survival_mat <- pmax(1 - CIF1_mat - CIF2_mat, prob.bound)
+
+  CIF1_sel <- CIF1_mat[cbind(seq_n, idx)]
+  CIF2_sel <- CIF2_mat[cbind(seq_n, idx)]
+  survival_sel <- survival_mat[cbind(seq_n, idx)]
+
+  calculateA <- function(effect.measure, CIFs_selected) {
+    CIFs_selected <- clamp_prob(CIFs_selected)
+    if (effect.measure == "RR") {
+      return(1 / CIFs_selected)
+    } else if (effect.measure == "OR") {
+      denom <- clamp_prob(1 - CIFs_selected)
+      return(1 / CIFs_selected + 1 / denom)
+    } else if (effect.measure == "SHR") {
+      denom <- clamp_prob(1 - CIFs_selected)
+      tmp1 <- -1 / denom
+      tmp2 <- log(denom)
+      return(tmp1 / tmp2)
+    } else {
+      stop("Invalid effect_measure. Must be RR, OR or SHR.")
+    }
+  }
+
+  a11 <- calculateA(estimand$effect.measure1, CIF1_sel)
+  a22 <- calculateA(estimand$effect.measure2, CIF2_sel)
+  a12 <- rep(0, length.out = n)
+
+  denom_beta <- a11 * a22 - a12 * a12
+  d_ey_d_beta_11 <- a22 / denom_beta
+  d_ey_d_beta_12 <- -a12 / denom_beta
+  d_ey_d_beta_22 <- a11 / denom_beta
+
+  c12 <- 1 / survival_sel
+  c11 <- a11 + c12
+  c22 <- a22 + c12
+
+  denom_alpha <- c11 * c22 - c12 * c12
+  d_ey_d_alpha_11 <- c22 / denom_alpha
+  d_ey_d_alpha_12 <- -c12 / denom_alpha
+  d_ey_d_alpha_22 <- c11 / denom_alpha
+
+  scale_matrix <- function(mat, vec) {
+    if (is.null(mat) || ncol(mat) == 0) {
+      return(NULL)
+    }
+    sweep(mat, 1, vec, `*`)
+  }
+
+  beta_11 <- scale_matrix(x_a, d_ey_d_beta_11)
+  beta_12 <- scale_matrix(x_a, d_ey_d_beta_12)
+  beta_22 <- scale_matrix(x_a, d_ey_d_beta_22)
+
+  d_11 <- cbind(sweep(x_l, 1, d_ey_d_alpha_11, `*`), beta_11)
+  d_12 <- cbind(sweep(x_l, 1, d_ey_d_alpha_12, `*`), beta_12)
+  d_22 <- cbind(sweep(x_l, 1, d_ey_d_alpha_22, `*`), beta_22)
+  return(list(d_11 = d_11, d_12 = d_12, d_22 = d_22))
+}
+
+calculateD_old <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) { #分類曝露未対応
   CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
   CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
   CIF3 <- ifelse(potential.CIFs[, 3] == 0, prob.bound, ifelse(potential.CIFs[, 3] == 1, 1 - prob.bound, potential.CIFs[, 3]))
@@ -353,7 +431,54 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
 
+
 calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
+  x_a <- as.matrix(x_a)
+  n <- nrow(x_l)
+  if (nrow(x_a) != n) stop("Row dimension of x_a and x_l must match.")
+  K <- if (!is.null(estimand$exposure.levels)) estimand$exposure.levels else (ncol(x_a) + 1L)
+  if (ncol(potential.CIFs) < K) stop("Column dimension of potential.CIFs is insufficient for the number of exposure levels.")
+
+  seq_n <- seq_len(n)
+  idx <- max.col(cbind(0, x_a), ties.method = "first")
+
+  clamp_prob <- function(x) {
+    x <- pmax(x, prob.bound)
+    x <- pmin(x, 1 - prob.bound)
+    return(x)
+  }
+
+  CIF_mat <- clamp_prob(potential.CIFs[, seq_len(K), drop = FALSE])
+  CIF_sel <- CIF_mat[cbind(seq_n, idx)]
+
+  calculateA <- function(effect_measure, CIFs_selected) {
+    CIFs_selected <- clamp_prob(CIFs_selected)
+    if (effect_measure == "RR") {
+      return(1 / CIFs_selected)
+    } else if (effect_measure == "OR") {
+      denom <- clamp_prob(1 - CIFs_selected)
+      return(1 / CIFs_selected + 1 / denom)
+    } else if (effect_measure == "SHR") {
+      denom <- clamp_prob(1 - CIFs_selected)
+      tmp1 <- -1 / denom
+      tmp2 <- log(denom)
+      return(tmp1 / tmp2)
+    } else {
+      stop("Invalid effect_measure. Must be RR, OR or SHR.")
+    }
+  }
+
+  a11 <- calculateA(estimand$effect.measure1, CIF_sel)
+  d_ey_d_beta_11 <- 1 / a11
+  d_ey_d_alpha_11 <- 1 / a11
+
+  beta_11 <- if (ncol(x_a) == 0) NULL else sweep(x_a, 1, d_ey_d_beta_11, `*`)
+  d_11 <- cbind(sweep(x_l, 1, d_ey_d_alpha_11, `*`), beta_11)
+  return(d_11)
+}
+
+
+calculateDSurvival_old <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
   CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
 
@@ -444,10 +569,10 @@ estimating_equation_proportional <- function(
   i_time <- 0
   alpha_beta_i <- rep(NA, index.vector[7])
   for (specific.time in time.point) {
-    i_time <- i_time + 1
-    i_para <- index.vector[1]*(i_time-1)+1
-    alpha_beta_i[seq_len(index.vector[1])]                 <- alpha_beta[seq.int(i_para, i_para+index.vector[1]-1)]
-    alpha_beta_i[seq.int(index.vector[2], index.vector[3])] <- alpha_beta[index.vector[8]/2]
+    i_time <- i_time + 1                    #時間のインデックス
+    i_para <- index.vector[1]*(i_time-1)+1  #パラメータのうち時間依存性切片項のインデックス
+    alpha_beta_i[seq_len(index.vector[1])]                  <- alpha_beta[seq.int(i_para, i_para+index.vector[1]-1)]  #時間依存性切片項から共変量回帰係数までのインデックス
+    alpha_beta_i[seq.int(index.vector[2], index.vector[3])] <- alpha_beta[index.vector[8]/2] #パラメータのうち曝露のインデックス, 曝露分類未対応
 
     y_0 <- ifelse(epsilon == estimand$code.censoring | t > specific.time, 1, 0)
     y_1 <- ifelse(epsilon == estimand$code.event1 & t <= specific.time, 1, 0)
