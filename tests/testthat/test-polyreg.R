@@ -4,7 +4,8 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   tested_coefficient <- round(output$coefficient,digit=3)
   tested_cov <- round(output$cov[1,],digit=3)
   tested <- as.vector(cbind(tested_coefficient,tested_cov))
-  expected <- c(-1.383, 0.300, -3.991, 0.076, 0.007, -0.005, -0.001, 0.005)
+#  expected <- c(-1.383, 0.300, -3.991, 0.076, 0.007, -0.005, -0.001, 0.005)
+  expected <- c(-1.383, 0.300, -3.991, 0.076, 0.008, -0.005, 0.003, -0.002)
   expect_equal(tested, expected)
 })
 
@@ -15,7 +16,8 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   tested_cov <- round(output$cov[1,],digit=3)
   tested <- as.vector(cbind(tested_coefficient,tested_cov))
   #  expected <- c(-1.383, 0.300, -3.991, 0.076, 0.007, -0.005, -0.001, 0.005)
-  expected <- c(-1.383, 0.300, -3.988, 0.078, 0.007, -0.005, -0.001, 0.005)
+  #  expected <- c(-1.383, 0.300, -3.988, 0.078, 0.007, -0.005, -0.001, 0.005)
+  expected <- c(-1.383, 0.300, -3.988, 0.078, 0.008, -0.005, 0.003, -0.002)
   expect_equal(tested, expected)
 })
 
@@ -29,7 +31,8 @@ test_that("polyreg produced expected coefficients and variance covariance matrix
   tested_cov <- round(output$cov[1,],digit=3)
   tested <- as.vector(cbind(tested_coefficient,tested_cov))
 #  expected <- c(-1.383, -0.300, -3.991, -0.076, 0.016, -0.012, 0.004, -0.004)
-  expected <- c(-1.393, -0.301, -4.006, -0.074, 0.016, -0.012, 0.004, -0.004)
+#  expected <- c(-1.393, -0.301, -4.006, -0.074, 0.016, -0.012, 0.004, -0.004)
+  expected <- c(-1.393, -0.301, -4.006, -0.074, 0.017, -0.012, 0.010, -0.008)
   expect_equal(tested, expected)
 })
 
@@ -176,3 +179,70 @@ test_that("polyreg produced expected common effects in prostate", {
 #  expected <- c(-0.380, 0.323)
 #  expect_equal(tested, expected)
 #})
+
+
+test_that("calculateD produced the same D matrix for covariance as calculateD_old", {
+
+  calculateD_old <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) { #分類曝露未対応
+    CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
+    CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
+    CIF3 <- ifelse(potential.CIFs[, 3] == 0, prob.bound, ifelse(potential.CIFs[, 3] == 1, 1 - prob.bound, potential.CIFs[, 3]))
+    CIF4 <- ifelse(potential.CIFs[, 4] == 0, prob.bound, ifelse(potential.CIFs[, 4] == 1, 1 - prob.bound, potential.CIFs[, 4]))
+
+    calculateA <- function(effect_measure, exposed.CIFs, unexposed.CIFs, a) {
+      if (effect_measure == "RR") {
+        return(a * (1 / exposed.CIFs) + (1 - a) * (1 / unexposed.CIFs))
+      } else if (effect_measure == "OR") {
+        return(a * (1 / exposed.CIFs + 1 / (1 - exposed.CIFs)) + (1 - a) * (1 / unexposed.CIFs + 1 / (1 - unexposed.CIFs)))
+      } else if (effect_measure == "SHR") {
+        tmp1_exposed <- -1 / (1 - exposed.CIFs)
+        tmp1_unexposed <- -1 / (1 - unexposed.CIFs)
+        tmp2_exposed <- log(1 - exposed.CIFs)
+        tmp2_unexposed <- log(1 - unexposed.CIFs)
+        return(a * (tmp1_exposed / tmp2_exposed) + (1 - a) * (tmp1_unexposed / tmp2_unexposed))
+      } else {
+        stop("Invalid effect_measure. Must be RR, OR or SHR.")
+      }
+    }
+
+    a <- as.vector(x_a)
+    a11 <- a12 <- a22 <- NULL
+    a11 <- calculateA(estimand$effect.measure1, CIF2, CIF1, a)
+    a22 <- calculateA(estimand$effect.measure2, CIF4, CIF3, a)
+    #  a11 <- calculateA(estimand$effect.measure1, CIF3, CIF1, a)
+    #  a22 <- calculateA(estimand$effect.measure2, CIF4, CIF2, a)
+    a12 <- matrix(0, nrow = length(x_a), ncol = 1)
+
+    d_ey_d_beta_11 <- a22 / (a11 * a22 - a12 * a12)
+    d_ey_d_beta_12 <- -a12 / (a11 * a22 - a12 * a12)
+    d_ey_d_beta_22 <- a11 / (a11 * a22 - a12 * a12)
+    c12 <- a * (1 / (1 - CIF2 - CIF4)) + (1 - a) * (1 / (1 - CIF1 - CIF3))
+    c11 <- a11 + c12
+    c22 <- a22 + c12
+    d_ey_d_alpha_11 <- c22 / (c11 * c22 - c12 * c12)
+    d_ey_d_alpha_12 <- -c12 / (c11 * c22 - c12 * c12)
+    d_ey_d_alpha_22 <- c11 / (c11 * c22 - c12 * c12)
+    d_11 <- cbind((d_ey_d_alpha_11 * x_l), (d_ey_d_beta_11 * a))
+    d_12 <- cbind((d_ey_d_alpha_12 * x_l), (d_ey_d_beta_12 * a))
+    d_22 <- cbind((d_ey_d_alpha_22 * x_l), (d_ey_d_beta_22 * a))
+    return(list(d_11 = d_11, d_12 = d_12, d_22 = d_22))
+  }
+
+set.seed(123)
+n <- 10
+x_a <- matrix(rbinom(n, 1, 0.5), ncol = 1)
+x_l <- matrix(rnorm(n*2), ncol = 2)
+estimand <- list(exposure.levels = 2, effect.measure1 = "SHR", effect.measure2 = "SHR")
+prob.bound <- 1e-6
+
+CIF1 <- runif(n, 0.05, 0.4)  # event1, level1
+CIF2 <- runif(n, 0.05, 0.4)  # event1, level2
+CIF3 <- runif(n, 0.05, 0.4)  # event2, level1
+CIF4 <- runif(n, 0.05, 0.4)  # event2, level2
+potential.CIFs <- cbind(CIF1, CIF2, CIF3, CIF4)
+
+tested <- calculateD(potential.CIFs, x_a, x_l, estimand, prob.bound)
+expected <- calculateD_old(potential.CIFs, x_a, x_l, estimand, prob.bound)
+
+expect_equal(expected, tested)
+})

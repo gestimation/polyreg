@@ -254,51 +254,6 @@ calculateD <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   return(list(d_11 = d_11, d_12 = d_12, d_22 = d_22))
 }
 
-calculateD_old <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) { #分類曝露未対応
-  CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
-  CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
-  CIF3 <- ifelse(potential.CIFs[, 3] == 0, prob.bound, ifelse(potential.CIFs[, 3] == 1, 1 - prob.bound, potential.CIFs[, 3]))
-  CIF4 <- ifelse(potential.CIFs[, 4] == 0, prob.bound, ifelse(potential.CIFs[, 4] == 1, 1 - prob.bound, potential.CIFs[, 4]))
-
-  calculateA <- function(effect_measure, exposed.CIFs, unexposed.CIFs, a) {
-    if (effect_measure == "RR") {
-      return(a * (1 / exposed.CIFs) + (1 - a) * (1 / unexposed.CIFs))
-    } else if (effect_measure == "OR") {
-      return(a * (1 / exposed.CIFs + 1 / (1 - exposed.CIFs)) + (1 - a) * (1 / unexposed.CIFs + 1 / (1 - unexposed.CIFs)))
-    } else if (effect_measure == "SHR") {
-      tmp1_exposed <- -1 / (1 - exposed.CIFs)
-      tmp1_unexposed <- -1 / (1 - unexposed.CIFs)
-      tmp2_exposed <- log(1 - exposed.CIFs)
-      tmp2_unexposed <- log(1 - unexposed.CIFs)
-      return(a * (tmp1_exposed / tmp2_exposed) + (1 - a) * (tmp1_unexposed / tmp2_unexposed))
-    } else {
-      stop("Invalid effect_measure. Must be RR, OR or SHR.")
-    }
-  }
-
-  a <- as.vector(x_a)
-  a11 <- a12 <- a22 <- NULL
-  a11 <- calculateA(estimand$effect.measure1, CIF2, CIF1, a)
-  a22 <- calculateA(estimand$effect.measure2, CIF4, CIF3, a)
-#  a11 <- calculateA(estimand$effect.measure1, CIF3, CIF1, a)
-#  a22 <- calculateA(estimand$effect.measure2, CIF4, CIF2, a)
-  a12 <- matrix(0, nrow = length(x_a), ncol = 1)
-
-  d_ey_d_beta_11 <- a22 / (a11 * a22 - a12 * a12)
-  d_ey_d_beta_12 <- -a12 / (a11 * a22 - a12 * a12)
-  d_ey_d_beta_22 <- a11 / (a11 * a22 - a12 * a12)
-  c12 <- a * (1 / (1 - CIF2 - CIF4)) + (1 - a) * (1 / (1 - CIF1 - CIF3))
-  c11 <- a11 + c12
-  c22 <- a22 + c12
-  d_ey_d_alpha_11 <- c22 / (c11 * c22 - c12 * c12)
-  d_ey_d_alpha_12 <- -c12 / (c11 * c22 - c12 * c12)
-  d_ey_d_alpha_22 <- c11 / (c11 * c22 - c12 * c12)
-  d_11 <- cbind((d_ey_d_alpha_11 * x_l), (d_ey_d_beta_11 * a))
-  d_12 <- cbind((d_ey_d_alpha_12 * x_l), (d_ey_d_beta_12 * a))
-  d_22 <- cbind((d_ey_d_alpha_22 * x_l), (d_ey_d_beta_22 * a))
-  return(list(d_11 = d_11, d_12 = d_12, d_22 = d_22))
-}
-
 estimating_equation_survival <- function(
     formula,
     data,
@@ -405,7 +360,8 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
   survival_km <- calculateKaplanMeier(t, y_12)
   wy_1 <- w11 * (y_1 - ey_1)
   x_la <- cbind(x_l, x_a)
-  AB1 <- score[1:n, 1:index.vector[2]]
+#  AB1 <- score[1:n, 1:index.vector[2]]
+  AB1 <- score[1:n, 1:index.vector[3]]
   for (i_para in 1:index.vector[2]) {
     tmp0 <- x_la[, i_para]
     use <- (t <= estimand$time.point)
@@ -430,7 +386,6 @@ calculateCovSurvival <- function(objget_results, estimand, prob.bound)
   }
   return(list(cov_estimated = cov_estimated, score.function = total_score, influence.function = influence.function))
 }
-
 
 calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
   x_a <- as.matrix(x_a)
@@ -474,37 +429,6 @@ calculateDSurvival <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
 
   beta_11 <- if (ncol(x_a) == 0) NULL else sweep(x_a, 1, d_ey_d_beta_11, `*`)
   d_11 <- cbind(sweep(x_l, 1, d_ey_d_alpha_11, `*`), beta_11)
-  return(d_11)
-}
-
-
-calculateDSurvival_old <- function(potential.CIFs, x_a, x_l, estimand, prob.bound) {
-  CIF1 <- ifelse(potential.CIFs[, 1] == 0, prob.bound, ifelse(potential.CIFs[, 1] == 1, 1 - prob.bound, potential.CIFs[, 1]))
-  CIF2 <- ifelse(potential.CIFs[, 2] == 0, prob.bound, ifelse(potential.CIFs[, 2] == 1, 1 - prob.bound, potential.CIFs[, 2]))
-
-  calculateA <- function(effect_measure, exposed.CIFs, unexposed.CIFs, a) {
-    if (effect_measure == "RR") {
-      return(a * (1 / exposed.CIFs) + (1 - a) * (1 / unexposed.CIFs))
-    } else if (effect_measure == "OR") {
-      return(a * (1 / exposed.CIFs + 1 / (1 - exposed.CIFs)) + (1 - a) * (1 / unexposed.CIFs + 1 / (1 - unexposed.CIFs)))
-    } else if (effect_measure == "SHR") {
-      tmp1_exposed <- -1 / (1 - exposed.CIFs)
-      tmp1_unexposed <- -1 / (1 - unexposed.CIFs)
-      tmp2_exposed <- log(1 - exposed.CIFs)
-      tmp2_unexposed <- log(1 - unexposed.CIFs)
-      return(a * (tmp1_exposed / tmp2_exposed) + (1 - a) * (tmp1_unexposed / tmp2_unexposed))
-    } else {
-      stop("Invalid effect_measure. Must be RR, OR or SHR.")
-    }
-  }
-
-  a <- as.vector(x_a)
-  a11 <-NULL
-  a11 <- calculateA(estimand$effect.measure1, CIF2, CIF1, a)
-
-  d_ey_d_beta_11 <- 1 / a11
-  d_ey_d_alpha_11 <- 1 / a11
-  d_11 <- cbind((d_ey_d_alpha_11 * x_l), (d_ey_d_beta_11 * x_a))
   return(d_11)
 }
 
