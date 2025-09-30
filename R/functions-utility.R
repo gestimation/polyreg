@@ -95,7 +95,6 @@ defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefi
   if (!exposure %in% names(data)) {
     stop("exposure = '", exposure, "' is not found in data.")
   }
-
   a_ <- data[[exposure]]
   a_ <- factor(a_)
   a_ <- base::droplevels(a_)
@@ -112,7 +111,7 @@ defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefi
       ref_lab <- NULL
     }
   }
-  if (is.null(ref_lab)) ref_lab <- lev[1L]
+  if (is.null(ref_lab)) ref_lab <- lev[1]
   if (K < 1 || K == 1) stop("Exposure has only one level (", lev, ") or no valid levels. Effect estimation is not possible.")
   X <- stats::model.matrix(~ a_)[, -1, drop = FALSE]
   cn <- colnames(X)
