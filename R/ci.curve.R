@@ -155,7 +155,7 @@ ci.curve <- function(formula,
 
 
 
-calculateAJ_new <- function(data) {
+calculateAJ <- function(data) {
   # まず層付きKM（検閲重み）は元コードと同じ
   out_km0 <- calculateKM_rcpp(data$t, data$d0, data$w, as.integer(data$strata), "none")
   km0 <- get_surv(data$t, out_km0$surv, out_km0$time, as.integer(data$strata), out_km0$strata)
@@ -250,7 +250,7 @@ calculateAJ_new <- function(data) {
   )
 }
 
-calculateAJ <- function(data) {
+calculateAJ_old <- function(data) {
   out_km0 <- calculateKM_rcpp(data$t, data$d0, data$w, as.integer(data$strata), "none")
   km0 <- get_surv(data$t, out_km0$surv, out_km0$time, as.integer(data$strata), out_km0$strata)
   ip.weight <- (data$d0==0) * ifelse(km0 > 0, 1 / km0, 0)

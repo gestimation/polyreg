@@ -135,6 +135,72 @@ calculateJackKnifeSE <- function(data, estimator, outputPseudo=FALSE) {
 }
 
 
+calculateAalenDeltaSE <- function(
+    CIF_time,
+    CIF_value,
+    n.event1,
+    n.event2,
+    n.atrisk,
+    km_time,
+    km_value,
+    strata,
+    error = c("aalen","delta")
+){
+  error <- match.arg(error)
+#  if (!all(lengths(list(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value, strata)) ==length(CIF_time))) {
+#    stop("All inputs must have the same length.")
+#  }
+
+  idx_by_stratum <- split(seq_along(CIF_time), as.integer(strata))
+  CIF2_var_0 <- numeric(length(CIF_time))
+
+  for (ix in idx_by_stratum) {
+    if(error == "aalen"){
+      CIF2_var_0[ix] <- calcAalenVariance(
+        CIF_time = CIF_time[ix],
+        CIF_value = CIF_value[ix],
+        n.event1 = n.event1[ix],
+        n.event2 = n.event2[ix],
+        n.atrisk = n.atrisk[ix],
+        km_time  = km_time[ix],
+        km_value = km_value[ix]
+      )
+    }
+    else if(error == "delta"){
+      CIF2_var_0[ix] <- calcDeltaVariance(
+        CIF_time = CIF_time[ix],
+        CIF_value = CIF_value[ix],
+        n.event1 = n.event1[ix],
+        n.event2 = n.event2[ix],
+        n.atrisk = n.atrisk[ix],
+        km_time  = km_time[ix],
+        km_value = km_value[ix]
+      )
+    }
+  }
+  return(sqrt(CIF2_var_0))
+}
+
+calculateAalenDeltaSE_old <- function(
+    CIF_time,
+    CIF_value,
+    n.event1,
+    n.event2,
+    n.atrisk,
+    km_time,
+    km_value,
+    error
+){
+  if(error == "aalen"){
+    CIF2_var_0 <- calcAalenVariance(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value)
+    return(sqrt(CIF2_var_0))
+  }
+  else if(error == "delta"){
+    CIF2_var_0 <- calcDeltaVariance(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value)
+    return(sqrt(CIF2_var_0))
+  }
+}
+
 calcAalenVariance <- function(
     CIF_time,
     CIF_value,
@@ -205,22 +271,3 @@ calcDeltaVariance <- function(
   return(first_term + second_term -2 * third_term)
 }
 
-calculateAalenDeltaSE <- function(
-    CIF_time,
-    CIF_value,
-    n.event1,
-    n.event2,
-    n.atrisk,
-    km_time,
-    km_value,
-    error
-){
-  if(error == "aalen"){
-    CIF2_var_0 <- calcAalenVariance(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value)
-    return(sqrt(CIF2_var_0))
-  }
-  else if(error == "delta"){
-    CIF2_var_0 <- calcDeltaVariance(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value)
-    return(sqrt(CIF2_var_0))
-  }
-}
