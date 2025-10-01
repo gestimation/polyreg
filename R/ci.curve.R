@@ -153,6 +153,103 @@ ci.curve <- function(formula,
   return(survfit_object)
 }
 
+
+
+calculateAJ_new <- function(data) {
+  # まず層付きKM（検閲重み）は元コードと同じ
+  out_km0 <- calculateKM_rcpp(data$t, data$d0, data$w, as.integer(data$strata), "none")
+  km0 <- get_surv(data$t, out_km0$surv, out_km0$time, as.integer(data$strata), out_km0$strata)
+  ip.weight <- (data$d0 == 0) * ifelse(km0 > 0, 1 / km0, 0)
+  d1_ipw <- as.matrix(data$w * data$d1 * ip.weight)
+
+  # ここから出力用ベクトル
+  aj1 <- time1 <- integer(0)
+  n.cum.event1 <- n.cum.event2 <- n.cum.censor <- numeric(0)
+  n.event1 <- n.event2 <- n.censor <- numeric(0)
+  strata1 <- integer(0)
+  strata_vec <- as.integer(data$strata)
+
+  for (level in sort(unique(strata_vec))) {
+    idx <- which(strata_vec == level)
+
+    sub_t  <- data$t[idx]
+    sub_d0 <- data$d0[idx]
+    sub_d1 <- data$d1[idx]
+    sub_d2 <- data$d2[idx]
+    sub_d1_ipw <- d1_ipw[idx, , drop = FALSE]
+
+    ## --- 1) 時点で安定ソート ---
+    o <- order(sub_t)
+    sub_t  <- sub_t[o]
+    sub_d0 <- sub_d0[o]
+    sub_d1 <- sub_d1[o]
+    sub_d2 <- sub_d2[o]
+    sub_d1_ipw <- sub_d1_ipw[o, , drop = FALSE]
+
+    ## --- 2) 累積量は「その層内の各観測時点までの合計」 ---
+    ## sub_t(i) 時点までを含めるので outer(u, t, ">=") を使う
+    not_atrisk <- outer(sub_t, sub_t, FUN = ">=") # [i,j]=1 なら t_j <= t_i
+    sub_aj1 <- as.vector(not_atrisk %*% sub_d1_ipw) / length(sub_t)
+    sub_n.censor <- as.vector(not_atrisk %*% as.matrix(sub_d0))
+    sub_n.event1 <- as.vector(not_atrisk %*% as.matrix(sub_d1))
+    sub_n.event2 <- as.vector(not_atrisk %*% as.matrix(sub_d2))
+
+    ## --- 3) ユニークな時点に集約（同一時刻は最後の累積値を採用） ---
+    ## duplicated を使うと「最初」を取るので、rev()で最後を残す
+    keep <- !duplicated(rev(sub_t))
+    keep <- rev(keep)
+
+    u_t  <- sub_t[keep]
+    u_aj1 <- sub_aj1[keep]
+    u_nc  <- sub_n.censor[keep]
+    u_ne1 <- sub_n.event1[keep]
+    u_ne2 <- sub_n.event2[keep]
+
+    ## 念のため時点で再ソート（単調性担保）
+    oo <- order(u_t)
+    u_t  <- u_t[oo]
+    u_aj1 <- u_aj1[oo]
+    u_nc  <- u_nc[oo]
+    u_ne1 <- u_ne1[oo]
+    u_ne2 <- u_ne2[oo]
+
+    ## --- 4) 層内でのみ増分を計算してから結合 ---
+    inc_nc  <- c(u_nc[1],  diff(u_nc))
+    inc_ne1 <- c(u_ne1[1], diff(u_ne1))
+    inc_ne2 <- c(u_ne2[1], diff(u_ne2))
+
+    time1 <- c(time1, u_t)
+    aj1   <- c(aj1, u_aj1)
+
+    n.cum.censor <- c(n.cum.censor, u_nc)
+    n.cum.event1 <- c(n.cum.event1, u_ne1)
+    n.cum.event2 <- c(n.cum.event2, u_ne2)
+
+    n.censor <- c(n.censor, inc_nc)
+    n.event1 <- c(n.event1, inc_ne1)
+    n.event2 <- c(n.event2, inc_ne2)
+
+    strata1 <- c(strata1, length(u_t))
+  }
+
+  # デバッグ出力は必要に応じて
+  # print(aj1); print(strata1)
+
+  list(
+    time1 = time1,
+    aj1 = aj1,
+    n.event1 = n.event1,
+    n.event2 = n.event2,
+    n.censor = n.censor,
+    n.cum.event1 = n.cum.event1,
+    n.cum.event2 = n.cum.event2,
+    n.cum.censor = n.cum.censor,
+    strata1 = strata1,
+    time0 = out_km0$time,
+    km0 = out_km0$surv
+  )
+}
+
 calculateAJ <- function(data) {
   out_km0 <- calculateKM_rcpp(data$t, data$d0, data$w, as.integer(data$strata), "none")
   km0 <- get_surv(data$t, out_km0$surv, out_km0$time, as.integer(data$strata), out_km0$strata)

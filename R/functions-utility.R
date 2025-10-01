@@ -90,6 +90,48 @@ Event <- function(time, event) {
   ss
 }
 
+
+get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.strata=NULL, estimated.strata=NULL) {
+  predicted.surv <- numeric(length(predicted.time))
+  strata_start <- c(1, head(cumsum(estimated.strata), -1) + 1)
+  strata_end <- cumsum(estimated.strata)
+  if (any(is.na(predicted.time)))
+    stop("Invalid predicted time variable. NA values included")
+
+  for (i in seq_along(predicted.time)) {
+    t <- predicted.time[i]
+    strata_size <- estimated.strata[predicted.strata[i]]
+
+    if (is.null(estimated.strata)|all(is.na(estimated.strata))) {
+      #      time_until_t <- estimated.time[estimated.time <= t]
+      time_until_t <- estimated.time[estimated.time < t]
+      if (length(time_until_t) > 0) {
+        time_index <- which.max(time_until_t)
+        predicted.surv[i] <- estimated.surv[time_index]
+      } else {
+        predicted.surv[i] <- 1
+      }
+    } else if (strata_size > 0|all(is.na(estimated.strata))) {
+      strata_indices <- strata_start[predicted.strata[i]]:strata_end[predicted.strata[i]]
+      strata_time <- estimated.time[strata_indices]
+      strata_surv <- estimated.surv[strata_indices]
+
+      #      time_until_t <- strata_time[strata_time <= t]
+      time_until_t <- strata_time[strata_time < t]
+
+      if (length(time_until_t) > 0) {
+        time_index <- which.max(time_until_t)
+        predicted.surv[i] <- strata_surv[time_index]
+      } else {
+        predicted.surv[i] <- 1
+      }
+    } else {
+      predicted.surv[i] <- NA
+    }
+  }
+  return(predicted.surv)
+}
+
 defineExposureDesign <- function(data, exposure, code.exposure.ref = NULL, prefix = "a") {
   stopifnot(is.data.frame(data))
   if (!exposure %in% names(data)) {
@@ -198,62 +240,6 @@ checkInput <- function(data, formula, exposure, code.event1, code.event2, code.c
   return(list(should.normalize.covariate = should.normalize.covariate.corrected, report.sandwich.conf = report.sandwich.conf.corrected, report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
 }
 
-checkInput_old <- function(data, formula, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.sandwich.conf, report.boot.conf, nleqslv.method, should.normalize.covariate) {
-  cl <- match.call()
-  if (missing(formula)) stop("A formula argument is required")
-  mf <- match.call(expand.dots = TRUE)[1:3]
-  special <- c("strata", "offset", "cluster")
-  out_terms <- terms(formula, special, data = data)
-  if (!is.null(attr(out_terms, "specials")$strata))
-    stop("strata() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$offset))
-    stop("offset() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$cluster))
-    stop("cluster() cannot appear in formula")
-  mf$formula <- out_terms
-  mf[[1]] <- as.name("model.frame")
-  mf <- eval(mf, parent.frame())
-  Y <- model.extract(mf, "response")
-  if (outcome.type %in% c("COMPETING-RISK","SURVIVAL","POLY-PROPORTIONAL","POLY-PROPORTIONAL")) {
-    if (!inherits(Y, c("Event", "Surv"))) {
-      stop("Surv- or Event-object is expected")
-    } else {
-      t <- as.numeric(Y[, 1])
-      if (any(t<0)) stop("Invalid time variable. Expected non-negative values. ")
-      if (any(is.na(t))) stop("Time variable contains NA.")
-
-      epsilon <- as.numeric(Y[, 2])
-      if (any(is.na(epsilon))) stop("Event variable contains NA.")
-      if (outcome.type == "SURVIVAL") {
-        if (!all(epsilon %in% c(code.event1, code.censoring)))
-          stop("SURVIVAL requires event codes {censoring,event1}.")
-      } else {
-        if (!all(epsilon %in% c(code.event1, code.event2, code.censoring)))
-          stop("COMPETING-RISK requires event codes {censoring,event1,event2}.")
-      }
-    }
-  }
-
-  out_defineExposureDesign <- defineExposureDesign(data, exposure, code.exposure.ref)
-  x_a <- out_defineExposureDesign$x_a
-  x_l <- model.matrix(out_terms, mf)
-  index.vector <- rep(NA, 7)
-  index.vector <- calculateIndexForParameter(NA,x_l,x_a)
-
-  if (!is.numeric(conf.level) || length(conf.level) != 1 || conf.level <= 0 || conf.level >= 1)
-    stop("conf.level must be a single number between 0 and 1")
-  if (is.null(report.boot.conf) & (outcome.type == 'PROPORTIONAL' | outcome.type == 'POLY-PROPORTIONAL')) {
-    report.boot.conf.corrected <- TRUE
-  } else if (is.null(report.boot.conf)) {
-    report.boot.conf.corrected <- FALSE
-  } else {
-    report.boot.conf.corrected <- report.boot.conf
-  }
-  outer_choices <- c("nleqslv","Newton","Broyden")
-  nleqslv.method <- match.arg(nleqslv.method, choices = outer_choices)
-  return(list(report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
-}
-
 read_time.point <- function(formula, data, x_a, outcome.type, code.censoring, should.terminate.time.point, time.point) {
 #  read_time.point <- function(formula, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point) {
     if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
@@ -301,7 +287,6 @@ read_time.point <- function(formula, data, x_a, outcome.type, code.censoring, sh
     return(time.point)
   }
 }
-
 
 createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {
   if (!is.null(subset.condition)) {
@@ -464,8 +449,6 @@ normalizeCovariate_old <- function(formula, data, should.normalize.covariate, ou
   out <- list(normalized_data=normalized_data, range=range_vector, n_covariate=n_covariate, n=nrow(data))
   return(out)
 }
-
-
 
 checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
   if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {

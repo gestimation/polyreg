@@ -68,7 +68,7 @@ calculateIPCWMatrix <- function(formula, data, code.censoring, strata_name, esti
   return(ip.weight.matrix)
 }
 
-get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.strata = NULL, estimated.strata = NULL) {
+get_surv_old <- function(predicted.time, estimated.surv, estimated.time, predicted.strata = NULL, estimated.strata = NULL) {
   predicted.surv <- numeric(length(predicted.time))
 
   if (!is.null(predicted.strata) && length(unique(predicted.strata)) == 1) {
