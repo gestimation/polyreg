@@ -472,7 +472,7 @@ polyreg <- function(
   cov_estimated        <- out_normalizeEstimate$cov_estimated
 
   #######################################################################################################
-  # 6. Calculating bootstrap confidence interval (functions: boot, solveEstimatingEquationP)
+  # 6. Calculating bootstrap confidence interval (functions: boot, solveEstimatingEquation)
   #######################################################################################################
   if (isTRUE(report.boot.conf)) {
     set.seed(boot.parameter2)

@@ -90,6 +90,16 @@ Event <- function(time, event) {
   ss
 }
 
+createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {
+  if (!is.null(subset.condition)) {
+    analysis_dataset <- subset(data, eval(parse(text = subset.condition)))
+  } else {
+    analysis_dataset <- data
+  }
+  all_vars <- c(all.vars(formula), other.variables.analyzed)
+  analysis_dataset <- analysis_dataset[, all_vars, drop = FALSE]
+  return(na.action(analysis_dataset))
+}
 
 get_surv <- function(predicted.time, estimated.surv, estimated.time, predicted.strata=NULL, estimated.strata=NULL) {
   predicted.surv <- numeric(length(predicted.time))
@@ -240,6 +250,53 @@ checkInput <- function(data, formula, exposure, code.event1, code.event2, code.c
   return(list(should.normalize.covariate = should.normalize.covariate.corrected, report.sandwich.conf = report.sandwich.conf.corrected, report.boot.conf = report.boot.conf.corrected, out_defineExposureDesign=out_defineExposureDesign, index.vector=index.vector))
 }
 
+
+checkDependentPackages <- function() {
+  if (requireNamespace("ggsurvfit", quietly = TRUE) & requireNamespace("Rcpp", quietly = TRUE)) {
+    suppressWarnings(library(ggsurvfit))
+    suppressWarnings(library(Rcpp))
+  } else {
+    stop("Required packages 'ggsurvfit' and/or 'Rcpp' are not installed.")
+  }
+}
+
+checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
+  if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {
+    outcome.type.corrected <- "COMPETING-RISK"
+  } else if (outcome.type %in% c("SURVIVAL", "S", "Survival", "Survival")) {
+    outcome.type.corrected <- "SURVIVAL"
+  } else if (outcome.type %in% c("POLY-PROPORTIONAL", "PP", "Poly-proportional", "poly-proportional")) {
+    outcome.type.corrected <- "POLY-PROPORTIONAL"
+  } else if (outcome.type %in% c("PROPORTIONAL", "P", "Proportional", "proportional")) {
+    outcome.type.corrected <- "PROPORTIONAL"
+  } else if (outcome.type %in% c("BINOMIAL", "B", "Binomial", "binomial")) {
+    outcome.type.corrected <- "BINOMIAL"
+  } else {
+    stop("Invalid input for outcome.type, Choose 'COMPETING-RISK', 'SURVIVAL', 'BINOMIAL', 'PROPORTIONAL', or 'POLY-PROPORTIONAL'.")
+  }
+  if (effect.measure1 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
+    effect.measure1.corrected <- "RR"
+  } else if (effect.measure1 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
+    effect.measure1.corrected <- "OR"
+  } else if (effect.measure1 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
+                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
+    effect.measure1.corrected <- "SHR"
+  } else {
+    stop("Invalid input for effect.measure1, Choose 'RR', 'OR', or 'SHR'.")
+  }
+  if (effect.measure2 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
+    effect.measure2.corrected <- "RR"
+  } else if (effect.measure2 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
+    effect.measure2.corrected <- "OR"
+  } else if (effect.measure2 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
+                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
+    effect.measure2.corrected <- "SHR"
+  } else {
+    stop("Invalid input for effect.measure2, Choose 'RR', 'OR', or 'SHR'.")
+  }
+  return(list(outcome.type = outcome.type.corrected, effect.measure1 = effect.measure1.corrected, effect.measure2 = effect.measure2.corrected))
+}
+
 read_time.point <- function(formula, data, x_a, outcome.type, code.censoring, should.terminate.time.point, time.point) {
 #  read_time.point <- function(formula, data, outcome.type, exposure, code.censoring, code.exposure.ref, time.point) {
     if (outcome.type %in% c("COMPETING-RISK","SURVIVAL")) {
@@ -288,17 +345,6 @@ read_time.point <- function(formula, data, x_a, outcome.type, code.censoring, sh
   }
 }
 
-createAnalysisDataset <- function(formula, data, other.variables.analyzed=NULL, subset.condition=NULL, na.action=na.pass) {
-  if (!is.null(subset.condition)) {
-    analysis_dataset <- subset(data, eval(parse(text = subset.condition)))
-  } else {
-    analysis_dataset <- data
-  }
-  all_vars <- c(all.vars(formula), other.variables.analyzed)
-  analysis_dataset <- analysis_dataset[, all_vars, drop = FALSE]
-  return(na.action(analysis_dataset))
-}
-
 clampP <- function(p, eps = 1e-5) pmin(pmax(p, eps), 1 - eps)
 clampLogP <- function(x, eps = 1e-5) {
   ex <- exp(x)
@@ -335,37 +381,6 @@ create_rr_text <- function(coefficient, cov, index, omit.conf.int=TRUE, conf.int
     else text <- paste0("RR=", round(exp(coef), digit=2), " (", round(exp(conf_low), digit=2), " to ", round(exp(conf_high), digit=2), ", p=", p_value, ")")
   }
   return(text)
-}
-
-createTestData <- function(n, w, first_zero=FALSE, last_zero=FALSE, subset_present=FALSE, logical_strata=FALSE, na_strata=FALSE) {
-  one <- rep(1, n)
-  t <- c(1:(n/2), 1:(n/2))
-  epsilon <- rep(1, n)
-  epsilon[2] <- 2
-  epsilon[3] <- 2
-  if (first_zero==TRUE) {
-    epsilon[1] <- 0
-    epsilon[n/2+1] <- 0
-  }
-  if (last_zero==TRUE) {
-    epsilon[n/2] <- 0
-    epsilon[n] <- 0
-  }
-  w <- rep(w, n)
-  if (logical_strata==TRUE) {
-    strata <- (t %% 2 == 0)
-  } else {
-    strata <- as.factor((t %% 2 == 0))
-  }
-  if (na_strata==TRUE) {
-    strata[1] <- NA
-  }
-  subset <- rep(1, n)
-  if (subset_present==TRUE) {
-    subset[1] <- 0
-  }
-  d <- as.numeric(epsilon>0)
-  return(data.frame(id = 1:n, t = t, epsilon = epsilon, d = d, w = w, strata = strata, subset=subset))
 }
 
 normalizeCovariate <- function(formula, data, should.normalize.covariate, outcome.type, exposure.levels) {
@@ -450,41 +465,62 @@ normalizeCovariate_old <- function(formula, data, should.normalize.covariate, ou
   return(out)
 }
 
-checkSpell <- function(outcome.type, effect.measure1, effect.measure2) {
-  if (outcome.type %in% c("COMPETING-RISK", "COMPETINGRISK", "C", "CR", "COMPETING RISK", "COMPETING-RISKS", "COMPETINGRISKS", "COMPETING RISKS", "Competingrisk", "Competing-risk", "Competing risk", "Competingrisks", "Competing-risks", "Competing risks", "competing-risk", "competingrisk", "competing risk", "competing-risks", "competingrisks", "competing risks")) {
-    outcome.type.corrected <- "COMPETING-RISK"
-  } else if (outcome.type %in% c("SURVIVAL", "S", "Survival", "Survival")) {
-    outcome.type.corrected <- "SURVIVAL"
-  } else if (outcome.type %in% c("POLY-PROPORTIONAL", "PP", "Poly-proportional", "poly-proportional")) {
-    outcome.type.corrected <- "POLY-PROPORTIONAL"
-  } else if (outcome.type %in% c("PROPORTIONAL", "P", "Proportional", "proportional")) {
-    outcome.type.corrected <- "PROPORTIONAL"
-  } else if (outcome.type %in% c("BINOMIAL", "B", "Binomial", "binomial")) {
-    outcome.type.corrected <- "BINOMIAL"
+readSurv <- function(formula, data, weights, code.event, code.censoring, subset.condition, na.action) {
+  data <- createAnalysisDataset(formula, data, weights, subset.condition, na.action)
+  cl <- match.call()
+  if (missing(formula))
+    stop("A formula argument is required")
+  mf <- match.call(expand.dots = TRUE)[1:3]
+  special <- c("strata", "offset", "cluster")
+  out_terms <- terms(formula, special, data = data)
+  if (!is.null(attr(out_terms, "specials")$strata))
+    stop("strata() cannot appear in formula")
+  if (!is.null(attr(out_terms, "specials")$offset))
+    stop("offset() cannot appear in formula")
+  if (!is.null(attr(out_terms, "specials")$cluster))
+    stop("cluster() cannot appear in formula")
+  mf$formula <- out_terms
+  mf[[1]] <- as.name("model.frame")
+  mf <- eval(mf, parent.frame())
+  Y <- model.extract(mf, "response")
+  if (!inherits(Y, c("Event", "Surv"))) {
+    stop("A 'Surv' or 'Event' object is expected")
   } else {
-    stop("Invalid input for outcome.type, Choose 'COMPETING-RISK', 'SURVIVAL', 'BINOMIAL', 'PROPORTIONAL', or 'POLY-PROPORTIONAL'.")
+    t <- Y[, 1]
+    if (any(t<0)) {
+      stop("Invalid time variable. Expected non-negative values. ")
+    }
+    if (!all(Y[, 2] %in% c(code.event, code.censoring))) {
+      stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
+    } else {
+      epsilon <- Y[, 2]
+      d <- ifelse(Y[, 2] == code.censoring, 0, 1)
+      d0 <- ifelse(Y[, 2] == code.censoring, 1, 0)
+      d1 <- ifelse(Y[, 2] == code.event[1], 1, 0)
+      d2 <- ifelse(Y[, 2] == code.event[2], 1, 0)
+    }
   }
-  if (effect.measure1 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
-    effect.measure1.corrected <- "RR"
-  } else if (effect.measure1 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
-    effect.measure1.corrected <- "OR"
-  } else if (effect.measure1 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
-                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
-    effect.measure1.corrected <- "SHR"
+  if (is.na(all.vars(out_terms)[3])) {
+    strata <- rep(1, nrow(data))
+    strata_name <- NULL
   } else {
-    stop("Invalid input for effect.measure1, Choose 'RR', 'OR', or 'SHR'.")
+    strata_name <- all.vars(out_terms)[3]
+    strata <- as.factor(data[[strata_name]])
   }
-  if (effect.measure2 %in% c("RR", "rr", "RISK RATIO", "Risk ratio", "risk ratio")) {
-    effect.measure2.corrected <- "RR"
-  } else if (effect.measure2 %in% c("OR", "or", "ODDS RATIO", "Odds ratio", "odds ratio")) {
-    effect.measure2.corrected <- "OR"
-  } else if (effect.measure2 %in% c("SHR", "shr", "HR", "hr", "SUBDISTRIBUTION HAZARD RATIO",
-                                    "Subdistibution hazard ratio", "subdistibution hazard ratio")) {
-    effect.measure2.corrected <- "SHR"
+  if (is.null(weights)) {
+    w <- rep(1, nrow(data))
   } else {
-    stop("Invalid input for effect.measure2, Choose 'RR', 'OR', or 'SHR'.")
+    w <- data[[weights]]
+    if (!is.numeric(w))
+      stop("Weights must be numeric")
+    if (any(!is.finite(w)))
+      stop("Weights must be finite")
+    if (any(w < 0))
+      stop("Weights must be non-negative")
+    if (any(is.na(w)))
+      stop("Weights contain NA values")
   }
-  return(list(outcome.type = outcome.type.corrected, effect.measure1 = effect.measure1.corrected, effect.measure2 = effect.measure2.corrected))
+  return(list(t = t, epsilon = epsilon, d = d, d0 = d0, d1 = d1, d2 = d2, strata = strata, strata_name = strata_name, w=w))
 }
 
 
@@ -537,46 +573,3 @@ append_trace <- function(trace_df, iteration, computation.time.second = NA_real_
 }
 
 
-fcif <- function(cif,rr,type=c("cif","cloglog","logistic")) {
-  mcif <- max(cif[,2])
-  if (type[1]=="cif") mcif <- mcif*rr
-  if (type[1]=="cloglog") mcif <- 1- exp(-mcif*rr)
-  if (type[1]=="logistic") mcif <- mcif* rr/(1 + mcif * rr)
-  return(mcif)
-}
-
-simRR <- function(n,cif1,cif2,lrr1,lrr2,cens=NULL,type1=c("cif","cloglog","logistic"),type2=c("cif","cloglog","logistic")) {
-  A <- rbinom(n,1,0.5)
-  L <- rbinom(n,1,0.5)
-  rr1 <- exp(cbind(A,L) %*% lrr1)
-  rr2 <- exp(cbind(A,L) %*% lrr2)
-  f1 <- fcif(cif1,max(rr1),type=type1[1])
-  f2 <- fcif(cif2,max(rr2),type=type2[1])
-  mmm<- f1+f2
-  mcif1 <- fcif(cif1,rr1,type=type1[1])
-  mcif2 <- fcif(cif2,rr2,type=type2[1])
-  if (mmm>1) warning(" models not satisfying sum <=1\n")
-  T1 <- simsubdist(cif1,rr1,type=type1[1])
-  T2 <- simsubdist(cif2,rr2,type=type2[1])
-  dies <- rbinom(n,1,mcif1+mcif2)
-  sel1 <- rbinom(n,1,mcif2/(mcif1+mcif2))+1
-  epsilon  <- dies*(sel1)
-  T1$epsilon <- epsilon
-  T1$A <- A
-  T1$L <- L
-  T1$time <- T1$timecause
-  T1$time2 <- T2$timecause
-  T1$status <- epsilon
-  T1 <- dtransform(T1,time=100,epsilon==0)
-  T1 <- dtransform(T1,status=0,epsilon==0)
-  T1 <- dtransform(T1,time=time2,epsilon==2)
-  T1 <- dtransform(T1,status=2,epsilon==2)
-  data <- T1
-
-  if (!is.null(cens))  {
-    cc <- rexp(n)/cens
-    data$status <- ifelse(data$time<cc,data$status,0)
-    data$time <- pmin(data$time,cc)
-  }
-  return(data)
-}

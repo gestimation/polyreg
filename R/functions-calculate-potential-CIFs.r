@@ -1,3 +1,92 @@
+calculatePotentialCIFs <- function(alpha_beta_tmp, x_a, x_l, offset, epsilon, estimand, optim.method, prob.bound, initial.CIFs = NULL) {
+  K <- estimand$exposure.levels
+  n  <- length(epsilon)
+  index.vector <- estimand$index.vector
+
+  alpha_1    <- alpha_beta_tmp[seq_len(index.vector[1])]
+  beta_tmp_1 <- alpha_beta_tmp[seq.int(index.vector[2], index.vector[3])]
+  alpha_2    <- alpha_beta_tmp[seq.int(index.vector[4], index.vector[5])]
+  beta_tmp_2 <- alpha_beta_tmp[seq.int(index.vector[6], index.vector[7])]
+  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
+  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
+
+  tmp1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
+  CIF1 <- rep(tmp1, K)
+  tmp2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
+  CIF2 <- rep(tmp2, K)
+  p0 <- c(CIF1,CIF2)
+  p0     <- clampP(p0, prob.bound)
+  log_p0 <- log(p0)
+
+  keys <- apply(x_l, 1, function(r) paste0(r, collapse = "\r"))
+  uniq <- match(keys, unique(keys))
+  cache_log_CIFs <- vector("list", length = max(uniq))
+
+  potential.CIFs <- matrix(NA_real_, nrow = n, ncol = 2*K)
+  for (i in seq_len(nrow(x_l))) {
+    k <- uniq[i]
+
+    if (!is.null(cache_log_CIFs[[k]])) {
+      log_CIFs <- cache_log_CIFs[[k]]
+    } else {
+      CIFs0 <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, seq_len(2*K), drop = FALSE]) else exp(log_p0)
+      log_CIFs0 <- log(clampP(CIFs0, prob.bound))
+      log_CIFs <- callLevenbergMarquardt(
+        log_CIFs0  = log_CIFs0,
+        alpha1    = alpha_tmp_1[i],
+        beta1     = beta_tmp_1,
+        alpha2    = alpha_tmp_2[i],
+        beta2     = beta_tmp_2,
+        estimand  = estimand,
+        optim.method = optim.method,
+        prob.bound = prob.bound
+      )
+      cache_log_CIFs[[k]] <- log_CIFs
+    }
+    potential.CIFs[i, ] <- clampP(exp(log_CIFs), prob.bound)
+  }
+  return(potential.CIFs)
+}
+
+calculatePotentialRisk <- function(alpha_beta, x_a, x_l, offset, estimand) {
+  index.vector <- estimand$index.vector
+  one <- rep(1, nrow(x_l))
+  alpha_beta_ <- as.matrix(as.vector(alpha_beta))
+  if (ncol(alpha_beta_) == 1L) alpha_beta_ <- t(alpha_beta_)
+  phi <- x_l %*% alpha_beta_[, seq_len(index.vector[1])] + offset
+  theta <- one * alpha_beta_[, index.vector[2]]
+
+  if (estimand$effect.measure1 == "RR") {
+    expphi <- exp(phi)
+    exptheta <- exp(theta)
+    tol <- 1e-8
+    if (all(abs(phi) < tol)) {
+      p_10 <- one / (one + exptheta)
+      p_11 <- exptheta * p_10
+    } else {
+      denomi_1 <- -(exptheta + one) * expphi
+      denomi_2 <- sqrt(exp(2 * phi) * (exptheta + one) * (exptheta + one) + 4 * exp(theta + phi) * (one - expphi))
+      denomi <- denomi_1 + denomi_2
+      numera <- 2 * exptheta * (one - expphi)
+      p_10 <- denomi / numera
+      p_11 <- exptheta * p_10
+    }
+  } else if (estimand$effect.measure1 == "OR") {
+    sqrt1 <- sqrt(exp(-theta - phi))
+    sqrt2 <- sqrt(exp(theta - phi))
+    if (all(phi == theta)) {
+      p_10 <- 0.5 * one
+      p_11 <- one/(one + sqrt1)
+    } else {
+      p_10 <- one/(one + sqrt2)
+      p_11 <- one/(one + sqrt1)
+    }
+  } else {
+    stop("Invalid effect_measure. Must be RR or OR.")
+  }
+  return(cbind(p_10, p_11))
+}
+
 residuals_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
   K <- estimand$exposure.levels
   clog_CIFs <- clampLogP(as.numeric(log_CIFs))
@@ -112,99 +201,6 @@ jacobian_CIFs <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob
       J[row, idx_L] <- pl / ((1 - pl) * Bi)
     } else stop("effect.measure must be RR, OR, or SHR.")
   }
-  return(J)
-}
-
-residuals_CIFs_old <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
-  K <- estimand$exposure.levels
-  clog_CIFs <- clampLogP(as.numeric(log_CIFs))
-  if (length(clog_CIFs) != 2*K || length(clog_CIFs) %% 2 != 0) stop("log_CIFs length must be even (2K).")
-
-  i1 <- 1:K                      # indices for event1 block
-  i2 <- (K+1):(2*K)              # indices for event2 block
-  p1 <- exp(clog_CIFs[i1])
-  p2 <- exp(clog_CIFs[i2])
-  p0 <- pmax(1 - p1 - p2, prob.bound)
-  logp0 <- log(p0)
-
-  r <- numeric(2*K)
-  r[1] <- alpha1 - clog_CIFs[i1[1]] - clog_CIFs[i1[2]] + logp0[1] + logp0[2]
-  r[K] <- alpha2 - clog_CIFs[i2[1]] - clog_CIFs[i2[2]] + logp0[1] + logp0[2]
-#  for (k in 2:K) {
-#    r[k - 1] <- alpha1[k - 1] - clogp[i1[1]] - clogp[i1[k]] + lrem[1] + lrem[k]
-#    r[(K - 1) + (k - 1)] <- alpha2[k - 1] - clogp[i2[1]] - clogp[i2[k]] + lrem[1] + lrem[k]
-#  }
-  calculateResidualBeta <- function(effect.measure, pref, pL, clogpref, clogpL, beta) {
-    if (effect.measure == "RR") {
-      sum(beta - clogpL + clogpref)
-    } else if (effect.measure == "OR") {
-      sum(beta - (log(pL) - log1p(-pL)) + (log(pref) - log1p(-pref)))
-    } else if (effect.measure == "SHR") {
-      Bi <- log1p(-pref)
-      Bj <- log1p(-pL)
-      sum(exp(beta) - (Bj / Bi))
-    } else stop("effect.measure must be RR, OR, or SHR.")
-  }
-  r[2*K - 1] <- calculateResidualBeta(estimand$effect.measure1, p1[1], p1[2:K], clog_CIFs[i1[1]], clog_CIFs[i1[2:K]], beta1)
-  r[2*K]     <- calculateResidualBeta(estimand$effect.measure2, p2[1], p2[2:K], clog_CIFs[i2[1]], clog_CIFs[i2[2:K]], beta2)
-  return(r)
-}
-
-jacobian_CIFs_old <- function(log_CIFs, alpha1, beta1, alpha2, beta2, estimand, prob.bound) {
-  K <- estimand$exposure.levels
-  clog_CIFs <- clampLogP(as.numeric(log_CIFs))
-  i1 <- 1:K
-  i2 <- (K+1):(2*K)
-  p1 <- exp(log_CIFs[i1])
-  p2 <- exp(log_CIFs[i2])
-  p0 <- pmax(1 - p1 - p2, prob.bound)
-
-  dlogrem_dlp1 <- -p1/p0
-  dlogrem_dlp2 <- -p2/p0
-
-  J <- matrix(0.0, nrow = 2*K, ncol = 2*K)
-  for (k in 2:K) {
-    r1 <- k - 1
-    J[r1,   i1[1]] <- -1 + dlogrem_dlp1[1]
-    J[r1,   i2[1]] <-      dlogrem_dlp2[1]
-    J[r1,   i1[k]] <- -1 + dlogrem_dlp1[k]
-    J[r1,   i2[k]] <-      dlogrem_dlp2[k]
-
-    r2 <- (K - 1) + (k - 1)
-    J[r2,   i2[1]] <- -1 + dlogrem_dlp2[1]
-    J[r2,   i1[1]] <-      dlogrem_dlp1[1]
-    J[r2,   i2[k]] <- -1 + dlogrem_dlp2[k]
-    J[r2,   i1[k]] <-      dlogrem_dlp1[k]
-  }
-
-  calculateGradient <- function(effect.measure, pref, pL, idx_ref, idx_L, K) {
-    g <- numeric(2*K)
-    if (effect.measure == "RR") {
-      g[idx_ref] <- g[idx_ref] + (K - 1)
-      g[idx_L]   <- g[idx_L]   - 1
-    } else if (effect.measure == "OR") {
-      g[idx_ref] <- g[idx_ref] + (1 + pref/(1 - pref)) * (K - 1)
-      for (k in seq_along(idx_L)) {
-        pl <- pL[k]
-        g[idx_L[k]] <- g[idx_L[k]] + (-1 - pl/(1 - pl))
-      }
-    } else if (effect.measure == "SHR") {
-      Bi <- log1p(-pref)                  # < 0
-      coef_ref <- sum(log1p(-pL)) * ( -pref/(1 - pref) ) / (Bi^2)
-      g[idx_ref] <- g[idx_ref] + coef_ref
-      for (k in seq_along(idx_L)) {
-        pl <- pL[k]
-        g[idx_L[k]] <- g[idx_L[k]] + pl / ((1 - pl) * Bi)
-      }
-    } else stop("effect.measure must be RR, OR, or SHR.")
-    return(g)
-  }
-  row_e1 <- 2*K - 1
-  row_e2 <- 2*K
-  g1 <- calculateGradient(estimand$effect.measure1, pref = p1[1], pL = p1[2:K], idx_ref = i1[1], idx_L = i1[2:K], K = K)
-  g2 <- calculateGradient(estimand$effect.measure2, pref = p2[1], pL = p2[2:K], idx_ref = i2[1], idx_L = i2[2:K], K = K)
-  J[row_e1, ] <- J[row_e1, ] + g1
-  J[row_e2, ] <- J[row_e2, ] + g2
   return(J)
 }
 
@@ -330,91 +326,3 @@ callLevenbergMarquardt <- function(log_CIFs0, alpha1, beta1, alpha2, beta2, opti
   return(out_LevenbergMarquardt)
 }
 
-calculatePotentialCIFs <- function(alpha_beta_tmp, x_a, x_l, offset, epsilon, estimand, optim.method, prob.bound, initial.CIFs = NULL) {
-  K <- estimand$exposure.levels
-  n  <- length(epsilon)
-  index.vector <- estimand$index.vector
-
-  alpha_1    <- alpha_beta_tmp[seq_len(index.vector[1])]
-  beta_tmp_1 <- alpha_beta_tmp[seq.int(index.vector[2], index.vector[3])]
-  alpha_2    <- alpha_beta_tmp[seq.int(index.vector[4], index.vector[5])]
-  beta_tmp_2 <- alpha_beta_tmp[seq.int(index.vector[6], index.vector[7])]
-  alpha_tmp_1 <- as.numeric(x_l %*% matrix(alpha_1, ncol = 1) + offset)
-  alpha_tmp_2 <- as.numeric(x_l %*% matrix(alpha_2, ncol = 1) + offset)
-
-  tmp1 <- sum(epsilon == estimand$code.event1) / n + prob.bound
-  CIF1 <- rep(tmp1, K)
-  tmp2 <- sum(epsilon == estimand$code.event2) / n + prob.bound
-  CIF2 <- rep(tmp2, K)
-  p0 <- c(CIF1,CIF2)
-  p0     <- clampP(p0, prob.bound)
-  log_p0 <- log(p0)
-
-  keys <- apply(x_l, 1, function(r) paste0(r, collapse = "\r"))
-  uniq <- match(keys, unique(keys))
-  cache_log_CIFs <- vector("list", length = max(uniq))
-
-  potential.CIFs <- matrix(NA_real_, nrow = n, ncol = 2*K)
-  for (i in seq_len(nrow(x_l))) {
-    k <- uniq[i]
-
-    if (!is.null(cache_log_CIFs[[k]])) {
-      log_CIFs <- cache_log_CIFs[[k]]
-    } else {
-      CIFs0 <- if (!is.null(initial.CIFs)) as.numeric(initial.CIFs[i, seq_len(2*K), drop = FALSE]) else exp(log_p0)
-      log_CIFs0 <- log(clampP(CIFs0, prob.bound))
-      log_CIFs <- callLevenbergMarquardt(
-        log_CIFs0  = log_CIFs0,
-        alpha1    = alpha_tmp_1[i],
-        beta1     = beta_tmp_1,
-        alpha2    = alpha_tmp_2[i],
-        beta2     = beta_tmp_2,
-        estimand  = estimand,
-        optim.method = optim.method,
-        prob.bound = prob.bound
-      )
-      cache_log_CIFs[[k]] <- log_CIFs
-    }
-    potential.CIFs[i, ] <- clampP(exp(log_CIFs), prob.bound)
-  }
-  return(potential.CIFs)
-}
-
-calculatePotentialRisk <- function(alpha_beta, x_a, x_l, offset, estimand) {
-  index.vector <- estimand$index.vector
-  one <- rep(1, nrow(x_l))
-  alpha_beta_ <- as.matrix(as.vector(alpha_beta))
-  if (ncol(alpha_beta_) == 1L) alpha_beta_ <- t(alpha_beta_)
-  phi <- x_l %*% alpha_beta_[, seq_len(index.vector[1])] + offset
-  theta <- one * alpha_beta_[, index.vector[2]]
-
-  if (estimand$effect.measure1 == "RR") {
-    expphi <- exp(phi)
-    exptheta <- exp(theta)
-    tol <- 1e-8
-    if (all(abs(phi) < tol)) {
-      p_10 <- one / (one + exptheta)
-      p_11 <- exptheta * p_10
-    } else {
-      denomi_1 <- -(exptheta + one) * expphi
-      denomi_2 <- sqrt(exp(2 * phi) * (exptheta + one) * (exptheta + one) + 4 * exp(theta + phi) * (one - expphi))
-      denomi <- denomi_1 + denomi_2
-      numera <- 2 * exptheta * (one - expphi)
-      p_10 <- denomi / numera
-      p_11 <- exptheta * p_10
-    }
-  } else if (estimand$effect.measure1 == "OR") {
-    sqrt1 <- sqrt(exp(-theta - phi))
-    sqrt2 <- sqrt(exp(theta - phi))
-    if (all(phi == theta)) {
-      p_10 <- 0.5 * one
-      p_11 <- one/(one + sqrt1)
-    } else {
-      p_10 <- one/(one + sqrt2)
-      p_11 <- one/(one + sqrt1)
-    }
-  } else {
-    stop("Invalid effect_measure. Must be RR or OR.")
-  }
-  return(cbind(p_10, p_11))
-}
