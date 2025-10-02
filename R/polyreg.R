@@ -1,5 +1,5 @@
 #' @title Direct polynomial regression for competing risks, survival and binomial analysis
-#' @description Fits the direct polynomial regression model for a binary exposure
+#' @description Fits the direct polynomial regression model for a categorical exposure
 #'   under several outcome types, including competing risks, survival and
 #'   binomial endpoints.
 #'

@@ -1,26 +1,28 @@
-#' Estimate and plot survival or cumulative incidence curves
+#' @title Survival curves and cumulative incidence curves
+#' @description Estimate and plot survival curves based on Kaplan-Meier estimator or cumulative incidence curves based on Aalen-Johansen estimators.
 #'
 #' @param formula Model formula representing outcome and strata.
-#' @param data data.frame Input dataset containing survival data.
-#' @param weights Column name representing the weights. The weights must be nonnegative and it is strongly recommended that they be strictly positive, since zero weights are ambiguous, compared to use of he subset argument.
-#' @param subset Specifies a condition for subsetting the data. Defaults to NULL.
-#' @param code.event Specifies the code of event. Defaults to 1. For competing risks, provide two event codes where the first is used for the event of interest.
-#' @param code.censoring Specifies the code of censoring. Defaults to 0.
-#' @param na.action Specifies a missing-data filter function, applied to the model frame, after any subset argument has been used. Defaults to na.pass.
-#' @param outcome.type Character string determining whether the Kaplan-Meier ("SURVIVAL") or Aalen-Johansen ("COMPETING-RISK") estimator is returned.
-#' @param conf.int The level for a two-sided confidence interval on the survival probabilities. Defaults to 0.95.
+#' @param data data A data frame containing the outcome and strata variable if necessary.
+#' @param weights Column name representing weights for estimation. The weights must be nonnegative and it is strongly recommended that they be strictly positive, since zero weights are ambiguous, compared to use of he subset argument.
+#' @param subset.condition Optional expression (as a character string) defining a subset of \code{data} to analyse. Defaults to \code{NULL}.
+#' @param na.action A function specifying the action to take on missing values. The default is \code{\link[stats]{na.omit}}.
+#' @param code.event1 Integer code corresponding to the first event of interest. Defaults to \code{1}.
+#' @param code.event2 Integer code corresponding to the competing event. Defaults to \code{2}.
+#' @param code.censoring Integer code representing censoring. Defaults to \code{0}.
+#' @param outcome.type Character string determining whether the Kaplan-Meier (\code{"SURVIVAL"}) or Aalen-Johansen (\code{"COMPETING-RISK"}) estimator is returned.
+#' @param conf.int The level for a two-sided confidence interval on the survival probabilities. Defaults to \code{0.95}.
 #' @param error Specifies standard error calculation. Supported options depend on `outcome.type`.
-#' @param conf.type Specifies transformation used to construct the confidence interval on the probabilities. Defaults to "arcsine-square root".
+#' @param conf.type Specifies transformation used to construct the confidence interval on the probabilities. Defaults to \code{"arcsine-square root"}.
 #' @param report.survfit.std.err Report standard error of log of survival probabilities. If this is not specified, the SE of survival probabilities is stored in std.err, unlike the original survfit. Defauts to FALSE.
-#' @param report.ggsurvfit Draw a survival plot using ggsurvfit. Defaults to TRUE.
-#' @param label.strata Labels of strata. Defaults to NULL.
-#' @param label.x Labels of x axis. Defaults to "Time".
-#' @param label.y Labels of y axis. Defaults depend on `output.type`.
-#' @param lims.x Range of x axis. Defaults to NULL.
-#' @param lims.y Range of y axis. Defaults to c(0, 1).
-#' @param font.family Specifies font family of the plot. Defaults to "sans".
-#' @param font.size Specifies font size of the plot. Defaults to 14.
-#' @param legend.position Specifies position of the legend of curves. Defaults to "top".
+#' @param report.ggsurvfit Draw a survival plot using ggsurvfit. Defaults to \code{TRUE}.
+#' @param label.strata Labels of strata. Defaults to \code{NULL}.
+#' @param label.x Labels of x axis. Defaults to \code{"Time"}.
+#' @param label.y Labels of y axis. Defaults to \code{"Survival probability"}.
+#' @param lims.x Range of x axis. Defaults to \code{NULL}.
+#' @param lims.y Range of y axis. Defaults to \code{c(0, 1)}.
+#' @param font.family Specifies font family of the plot. Defaults to \code{"sans"}.
+#' @param font.size Specifies font size of the plot. Defaults to \code{14}.
+#' @param legend.position Specifies position of the legend of curves. Defaults to \code{"top"}.
 #'
 #' @importFrom ggsurvfit ggsurvfit
 #' @returns A survfit object containing the Kaplan-Meier estimator or Aalen-Johansen estimator and related statistics. This object is formatted to conform to the survfit class, so note that surv contains estimates corresponds to survival probability or 1-cumulative incidence. Some methods for the class (e.g. residuals.survfit) are not supported.
@@ -28,18 +30,18 @@
 survival.curve <- function(formula,
                            data,
                            weights = NULL,
-                           subset = NULL,
+                           subset.condition = NULL,
+                           na.action = na.omit,
                            code.event1 = 1,
                            code.event2 = 2,
                            code.censoring = 0,
-                           na.action = na.pass,
                            outcome.type = "SURVIVAL",
                            conf.int = 0.95,
                            error = "greenwood",
                            conf.type = "arcsine-square root",
                            report.survfit.std.err = FALSE,
                            report.ggsurvfit = TRUE,
-                           ggsurvfit.type = "risk",
+                           ggsurvfit.type = NULL,
                            AddCensoringMark = FALSE,
                            AddConfidenceInterval = TRUE,
                            AddRiskTable = TRUE,
@@ -53,7 +55,7 @@ survival.curve <- function(formula,
                            legend.position = "top") {
   checkDependentPackages()
   outcome.type <- check_outcome.type(outcome.type)
-  out_readSurv <- readSurv(formula, data, weights, code.event1, code.event2, code.censoring, subset, na.action)
+  out_readSurv <- readSurv(formula, data, weights, code.event1, code.event2, code.censoring, subset.condition, na.action)
   error <- check_error(error, outcome.type)
 
   if (outcome.type == "SURVIVAL") {
@@ -86,7 +88,7 @@ survival.curve <- function(formula,
       n.censor = out_km$n.censor,
       std.err = out_km$std.err,
       upper = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
-      lower = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
+      lower = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$lower,
       conf.type = conf.type,
       call = match.call(),
       type = "kaplan-meier",
@@ -97,8 +99,6 @@ survival.curve <- function(formula,
     }
     class(survfit_object) <- c("survfit")
   } else {
-    if (is.null(label.y)) label.y <- "Cumulative incidence probability"
-
     out_aj <- calculateAJ(out_readSurv)
     out_aj <- readStrata(out_readSurv, out_aj, label.strata)
     if (any(as.integer(out_readSurv$strata) != 1)) {
@@ -125,7 +125,7 @@ survival.curve <- function(formula,
       n.censor = out_aj$n.censor,
       std.err = out_aj$std.err,
       upper = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
-      lower = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
+      lower = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$lower,
       conf.type = conf.type,
       call = match.call(),
       type = "Aalen-Johansen",
@@ -140,7 +140,6 @@ survival.curve <- function(formula,
   if (report.ggsurvfit) {
     if (is.null(lims.x)) lims.x <- c(0, max(out_readSurv$t))
 
-    # ヘルパ：ggsurvfit呼び分け（riskタイプ対応）
     call_ggsurvfit <- function(sfobj) {
       if (identical(ggsurvfit.type, "risk")) {
         ggsurvfit(sfobj, type = "risk")
@@ -150,7 +149,6 @@ survival.curve <- function(formula,
     }
 
     if (conf.type %in% c("none", "n") || length(survfit_object$strata) > 2) {
-      # CIなし（もしくは層が多い）ケース：上下限=生存確率を与えておく
       survfit_object_ <- survfit_object
       survfit_object_$lower <- survfit_object_$surv
       survfit_object_$upper <- survfit_object_$surv
@@ -167,7 +165,6 @@ survival.curve <- function(formula,
         lims(x = lims.x, y = lims.y) +
         theme(legend.position = "top")
 
-      # --- オプションの追加 ---
       if (isTRUE(AddConfidenceInterval)) {
         out_ggsurvfit <- out_ggsurvfit + add_confidence_interval()
       }
@@ -179,7 +176,6 @@ survival.curve <- function(formula,
       }
 
     } else {
-      # CIを使用する通常ケース
       if (length(survfit_object$time) != length(survfit_object$lower))
         stop("time and upper/lower required for ggsurvfit are different lengths")
       if (length(survfit_object$time) != length(survfit_object$n.risk))
@@ -196,7 +192,6 @@ survival.curve <- function(formula,
         labs(x = label.x, y = label.y) +
         lims(x = lims.x, y = lims.y)
 
-      # --- オプションの追加 ---
       if (isTRUE(AddConfidenceInterval)) {
         out_ggsurvfit <- out_ggsurvfit + add_confidence_interval()
       }

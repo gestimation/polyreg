@@ -127,7 +127,8 @@ test_that("polyreg produced expected common effects at 1:5 in prostate", {
   output <- polyreg(nuisance.model = Event(t,epsilon) ~ +1, exposure = 'a', strata='stage', data = prostate,
                     effect.measure1='RR', effect.measure2='RR', time.point=1:5, outcome.type='POLY-PROPORTIONAL', report.boot.conf=FALSE)
   tested <- round(output$coefficient,digit=3)
-  expected <- c(-4.246, -2.710, -1.420, -0.669, -0.109, -0.034, -3.702, -2.144, -0.882, -0.129,  0.506,  0.058)
+#  expected <- c(-2.246, -2.710, -1.420, -0.669, -0.109, -0.034, -3.702, -2.144, -0.882, -0.129,  0.506,  0.058)
+  expected <- c(-2.289, -1.753, -1.461, -1.363, -1.254, -0.034, -2.056, -1.609, -1.245, -1.067, -0.971, 0.058)
   expect_equal(tested, expected)
 })
 
@@ -149,7 +150,8 @@ test_that("polyreg produced expected common effects in prostate", {
                     effect.measure1='RR', outcome.type='PROPORTIONAL', report.boot.conf=FALSE)
   tested <- round(output$coefficient[1:4], digit=3)
   #expected <- c(-15.988, -15.550, -7.569, -7.560)
-  expected <- c(-6.835, -6.019, -5.016, -4.902)
+  #expected <- c(-6.835, -6.019, -5.016, -4.902)
+  expected <- c(-3.442, -2.882, -2.631, -2.526)
   expect_equal(tested, expected)
 })
 

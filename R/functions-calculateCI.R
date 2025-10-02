@@ -134,8 +134,53 @@ calculateJackKnifeSE <- function(data, estimator, outputPseudo=FALSE) {
   return(std.err)
 }
 
-
 calculateAalenDeltaSE <- function(
+    CIF_time,
+    CIF_value,
+    n.event1,
+    n.event2,
+    n.atrisk,
+    km_time,
+    km_value,
+    strata,
+    error = c("aalen","delta")
+){
+  sizes  <- as.integer(strata)
+  ends   <- cumsum(sizes)
+  starts <- ends - sizes + 1
+  idx_by_stratum <- Map(seq.int, starts, ends)
+  CIF2_var_0 <- numeric(length(CIF_time))
+
+  if (error == "aalen") {
+    for (ix in idx_by_stratum) {
+      CIF2_var_0[ix] <- calcAalenVariance(
+        CIF_time  = CIF_time[ix],
+        CIF_value = CIF_value[ix],
+        n.event1  = n.event1[ix],
+        n.event2  = n.event2[ix],
+        n.atrisk  = n.atrisk[ix],
+        km_time   = km_time[ix],
+        km_value  = km_value[ix]
+      )
+    }
+  } else { # error == "delta"
+    for (ix in idx_by_stratum) {
+      CIF2_var_0[ix] <- calcDeltaVariance(
+        CIF_time  = CIF_time[ix],
+        CIF_value = CIF_value[ix],
+        n.event1  = n.event1[ix],
+        n.event2  = n.event2[ix],
+        n.atrisk  = n.atrisk[ix],
+        km_time   = km_time[ix],
+        km_value  = km_value[ix]
+      )
+    }
+  }
+  return(sqrt(CIF2_var_0))
+}
+
+
+calculateAalenDeltaSE_old <- function(
     CIF_time,
     CIF_value,
     n.event1,
@@ -149,7 +194,6 @@ calculateAalenDeltaSE <- function(
 #  if (!all(lengths(list(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value, strata)) ==length(CIF_time))) {
 #    stop("All inputs must have the same length.")
 #  }
-
   idx_by_stratum <- split(seq_along(CIF_time), as.integer(strata))
   CIF2_var_0 <- numeric(length(CIF_time))
 
@@ -264,9 +308,6 @@ calcDeltaVariance <- function(
     second_term[i] <- second_cum
     third_term[i] <- third_cum
   }
-  #  print(first_term)
-  #  print(second_term)
-  #  print(third_term)
   return(first_term + second_term -2 * third_term)
 }
 
