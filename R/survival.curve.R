@@ -7,8 +7,9 @@
 #' @param code.event Specifies the code of event. Defaults to 1. For competing risks, provide two event codes where the first is used for the event of interest.
 #' @param code.censoring Specifies the code of censoring. Defaults to 0.
 #' @param na.action Specifies a missing-data filter function, applied to the model frame, after any subset argument has been used. Defaults to na.pass.
+#' @param outcome.type Character string determining whether the Kaplan-Meier ("SURVIVAL") or Aalen-Johansen ("COMPETING-RISK") estimator is returned.
 #' @param conf.int The level for a two-sided confidence interval on the survival probabilities. Defaults to 0.95.
-#' @param error Specifies standard error calculation. Supported options depend on `output.type`.
+#' @param error Specifies standard error calculation. Supported options depend on `outcome.type`.
 #' @param conf.type Specifies transformation used to construct the confidence interval on the probabilities. Defaults to "arcsine-square root".
 #' @param report.survfit.std.err Report standard error of log of survival probabilities. If this is not specified, the SE of survival probabilities is stored in std.err, unlike the original survfit. Defauts to FALSE.
 #' @param report.ggsurvfit Draw a survival plot using ggsurvfit. Defaults to TRUE.
@@ -20,7 +21,6 @@
 #' @param font.family Specifies font family of the plot. Defaults to "sans".
 #' @param font.size Specifies font size of the plot. Defaults to 14.
 #' @param legend.position Specifies position of the legend of curves. Defaults to "top".
-#' @param output.type Character string determining whether the Kaplan-Meier ("SURVIVAL") or Aalen-Johansen ("COMPETING-RISK") estimator is returned.
 #'
 #' @importFrom ggsurvfit ggsurvfit
 #' @returns A survfit object containing the Kaplan-Meier estimator or Aalen-Johansen estimator and related statistics. This object is formatted to conform to the survfit class, so note that surv contains estimates corresponds to survival probability or 1-cumulative incidence. Some methods for the class (e.g. residuals.survfit) are not supported.
@@ -29,11 +29,13 @@ survival.curve <- function(formula,
                            data,
                            weights = NULL,
                            subset = NULL,
-                           code.event = c(1, 2),
+                           code.event1 = 1,
+                           code.event2 = 2,
                            code.censoring = 0,
                            na.action = na.pass,
+                           outcome.type = "SURVIVAL",
                            conf.int = 0.95,
-                           error = NULL,
+                           error = "greenwood",
                            conf.type = "arcsine-square root",
                            report.survfit.std.err = FALSE,
                            report.ggsurvfit = TRUE,
@@ -42,28 +44,20 @@ survival.curve <- function(formula,
                            AddConfidenceInterval = TRUE,
                            AddRiskTable = TRUE,
                            label.x = "Time",
-                           label.y = NULL,
+                           label.y = "Survival probability",
                            label.strata = NULL,
                            lims.x = NULL,
                            lims.y = c(0, 1),
                            font.family = "sans",
                            font.size = 14,
-                           legend.position = "top",
-                           output.type = c("SURVIVAL", "COMPETING-RISK")) {
+                           legend.position = "top") {
   checkDependentPackages()
-  output.type <- match.arg(output.type)
-  conf.lower <- NULL
+  outcome.type <- check_outcome.type(outcome.type)
+  out_readSurv <- readSurv(formula, data, weights, code.event1, code.event2, code.censoring, subset, na.action)
+  if (nlevels(as.factor(data$d)) == 2) outcome.type <- "SURVIVAL"
+  error <- check_error(error, outcome.type)
 
-  out_readSurv <- readSurv(formula, data, weights, code.event, code.censoring, subset, na.action)
-
-  if (output.type == "SURVIVAL") {
-    if (is.null(error)) error <- "greenwood"
-    valid_errors <- c("greenwood", "tsiatis", "jackknife")
-    if (!error %in% valid_errors) {
-      stop("Invalid error method for SURVIVAL output. Supported options are 'greenwood', 'tsiatis', and 'jackknife'.")
-    }
-    if (is.null(label.y)) label.y <- "Survival probability"
-
+  if (outcome.type == "SURVIVAL") {
     out_km <- calculateKM_rcpp(out_readSurv$t, out_readSurv$d, out_readSurv$w, as.integer(out_readSurv$strata), error)
     if (error == "jackknife") {
       fn <- function(data) {
@@ -92,8 +86,8 @@ survival.curve <- function(formula,
       n.event = out_km$n.event,
       n.censor = out_km$n.censor,
       std.err = out_km$std.err,
-      upper = out_ci$upper,
-      lower = out_ci$lower,
+      upper = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
+      lower = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
       conf.type = conf.type,
       call = match.call(),
       type = "kaplan-meier",
@@ -104,12 +98,6 @@ survival.curve <- function(formula,
     }
     class(survfit_object) <- c("survfit")
   } else {
-    # COMPETING-RISK branch
-    if (is.null(error)) error <- "delta"
-    valid_errors <- c("aalen", "delta", "jackknife")
-    if (!error %in% valid_errors) {
-      stop("Invalid error method for COMPETING-RISK output. Supported options are 'aalen', 'delta', and 'jackknife'.")
-    }
     if (is.null(label.y)) label.y <- "Cumulative incidence probability"
 
     out_aj <- calculateAJ(out_readSurv)
@@ -124,7 +112,7 @@ survival.curve <- function(formula,
     }
     out_aj$std.err <- calculateAalenDeltaSE(out_aj$time1, out_aj$aj1, out_aj$n.event1, out_aj$n.event2, n.risk, out_aj$time0, out_aj$km0, out_aj$strata1, error)
     out_aj$surv <- 1 - out_aj$aj1
-    out_ci <- calculateCI(out_aj, conf.int, conf.type, conf.lower)
+    out_ci <- calculateCI(out_aj, conf.int, conf.type, conf.lower=NULL)
     if (report.survfit.std.err) {
       out_aj$std.err <- out_aj$std.err / out_aj$surv
     }
@@ -137,8 +125,8 @@ survival.curve <- function(formula,
       n.event = out_aj$n.event1,
       n.censor = out_aj$n.censor,
       std.err = out_aj$std.err,
-      upper = out_ci$upper,
-      lower = out_ci$lower,
+      upper = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
+      lower = if (is.null(conf.type) | conf.type == "none" | conf.type == "n") NULL else out_ci$upper,
       conf.type = conf.type,
       call = match.call(),
       type = "Aalen-Johansen",

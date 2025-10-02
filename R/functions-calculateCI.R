@@ -146,7 +146,6 @@ calculateAalenDeltaSE <- function(
     strata,
     error = c("aalen","delta")
 ){
-  error <- match.arg(error)
 #  if (!all(lengths(list(CIF_time, CIF_value, n.event1, n.event2, n.atrisk, km_time, km_value, strata)) ==length(CIF_time))) {
 #    stop("All inputs must have the same length.")
 #  }

@@ -58,7 +58,8 @@ ci.curve <- function(formula,
                      data,
                      weights = NULL,
                      subset = NULL,
-                     code.event = c(1, 2),
+                     code.event1 = 1,
+                     code.event2 = 2,
                      code.censoring = 0,
                      na.action = na.pass,
                      conf.int = 0.95,
@@ -76,7 +77,7 @@ ci.curve <- function(formula,
                      legend.position = "top"
 ) {
   checkDependentPackages()
-  out_readSurv <- readSurv(formula, data, weights, code.event, code.censoring, subset, na.action)
+  out_readSurv <- readSurv(formula, data, weights, code.event1, code.event2, code.censoring, subset, na.action)
   out_aj <- calculateAJ(out_readSurv)
   out_aj <- readStrata(out_readSurv, out_aj, label.strata)
   if (any(as.integer(out_readSurv$strata) != 1)) {
@@ -302,13 +303,4 @@ calculateAJ_old <- function(data) {
     n.event2[i] <- n.cum.event2[i]-n.cum.event2[i-1]
   }
   return(list(time1=time1, aj1=aj1, n.event1=n.event1, n.event2=n.event2, n.censor=n.censor, n.cum.event1=n.cum.event1, n.cum.event2=n.cum.event2, n.cum.censor=n.cum.censor, strata1=strata1, time0=out_km0$time, km0=out_km0$surv))
-}
-
-readStrata <- function(out_readSurv, out_aj, label.strata=NULL) {
-  if (!all(as.integer(out_readSurv$strata) == 1) & (is.null(label.strata))) {
-    names(out_aj$strata1) <- levels(as.factor(out_readSurv$strata))
-  } else if (!all(as.integer(out_readSurv$strata) == 1)) {
-    names(out_aj$strata1) <- label.strata
-  }
-  return(out_aj)
 }

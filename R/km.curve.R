@@ -56,7 +56,8 @@ km.curve <- function(formula,
                      data,
                      weights = NULL,
                      subset = NULL,
-                     code.event = c(1, 2),
+                     code.event1 = 1,
+                     code.event2 = 2,
                      code.censoring = 0,
                      na.action = na.pass,
                      conf.int = 0.95,
@@ -74,7 +75,7 @@ km.curve <- function(formula,
                      legend.position = "top"
 ) {
   checkDependentPackages()
-  out_readSurv <- readSurv(formula, data, weights, code.event, code.censoring, subset, na.action)
+  out_readSurv <- readSurv(formula, data, weights, code.event1, code.event2, code.censoring, subset, na.action)
   out_km <- calculateKM_rcpp(out_readSurv$t, out_readSurv$d, out_readSurv$w, as.integer(out_readSurv$strata), error)
   if (error=="jackknife") {
     fn <- function(data) {
@@ -155,62 +156,3 @@ km.curve <- function(formula,
   }
   return(survfit_object)
 }
-
-readSurv <- function(formula, data, weights, code.event, code.censoring, subset.condition, na.action) {
-  data <- createAnalysisDataset(formula, data, weights, subset.condition, na.action)
-  cl <- match.call()
-  if (missing(formula))
-    stop("A formula argument is required")
-  mf <- match.call(expand.dots = TRUE)[1:3]
-  special <- c("strata", "offset", "cluster")
-  out_terms <- terms(formula, special, data = data)
-  if (!is.null(attr(out_terms, "specials")$strata))
-    stop("strata() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$offset))
-    stop("offset() cannot appear in formula")
-  if (!is.null(attr(out_terms, "specials")$cluster))
-    stop("cluster() cannot appear in formula")
-  mf$formula <- out_terms
-  mf[[1]] <- as.name("model.frame")
-  mf <- eval(mf, parent.frame())
-  Y <- model.extract(mf, "response")
-  if (!inherits(Y, c("Event", "Surv"))) {
-    stop("A 'Surv' or 'Event' object is expected")
-  } else {
-    t <- Y[, 1]
-    if (any(t<0)) {
-      stop("Invalid time variable. Expected non-negative values. ")
-    }
-    if (!all(Y[, 2] %in% c(code.event, code.censoring))) {
-      stop("Invalid event codes. Must be 0 or 1 for survival and 0, 1 or 2 for competing risks, with 0 representing censoring, if event codes are not specified. ")
-    } else {
-      epsilon <- Y[, 2]
-      d <- ifelse(Y[, 2] == code.censoring, 0, 1)
-      d0 <- ifelse(Y[, 2] == code.censoring, 1, 0)
-      d1 <- ifelse(Y[, 2] == code.event[1], 1, 0)
-      d2 <- ifelse(Y[, 2] == code.event[2], 1, 0)
-    }
-  }
-  if (is.na(all.vars(out_terms)[3])) {
-    strata <- rep(1, nrow(data))
-    strata_name <- NULL
-  } else {
-    strata_name <- all.vars(out_terms)[3]
-    strata <- as.factor(data[[strata_name]])
-  }
-  if (is.null(weights)) {
-    w <- rep(1, nrow(data))
-  } else {
-    w <- data[[weights]]
-    if (!is.numeric(w))
-      stop("Weights must be numeric")
-    if (any(!is.finite(w)))
-      stop("Weights must be finite")
-    if (any(w < 0))
-      stop("Weights must be non-negative")
-    if (any(is.na(w)))
-      stop("Weights contain NA values")
-  }
-  return(list(t = t, epsilon = epsilon, d = d, d0 = d0, d1 = d1, d2 = d2, strata = strata, strata_name = strata_name, w=w))
-}
-

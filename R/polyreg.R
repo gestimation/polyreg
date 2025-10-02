@@ -167,8 +167,8 @@ polyreg <- function(
   # 1. Pre-processing (function: checkSpell, checkInput, normalizeCovariate, sortByCovariate)
   #######################################################################################################
   computation.time0 <- proc.time()
-  cs <- checkSpell(outcome.type, effect.measure1, effect.measure2)
-  outcome.type <- cs$outcome.type
+  outcome.type <- check_outcome.type(outcome.type)
+  ce <- check_effect.measure(effect.measure1, effect.measure2)
   ci <- checkInput(data, nuisance.model, exposure, code.event1, code.event2, code.censoring, code.exposure.ref, outcome.type, conf.level, report.sandwich.conf, report.boot.conf, nleqslv.method, should.normalize.covariate)
   should.normalize.covariate <- ci$should.normalize.covariate
   report.sandwich.conf <- ci$report.sandwich.conf
@@ -180,8 +180,8 @@ polyreg <- function(
   tp <- read_time.point(nuisance.model, normalized_data, ci$out_defineExposureDesign$x_a, outcome.type, code.censoring, should.terminate.time.point, time.point)
 
   estimand <- list(
-    effect.measure1=cs$effect.measure1,
-    effect.measure2=cs$effect.measure2,
+    effect.measure1=ce$effect.measure1,
+    effect.measure2=ce$effect.measure2,
     time.point=tp,
     code.event1=code.event1,
     code.event2=code.event2,
