@@ -54,7 +54,6 @@ survival.curve <- function(formula,
   checkDependentPackages()
   outcome.type <- check_outcome.type(outcome.type)
   out_readSurv <- readSurv(formula, data, weights, code.event1, code.event2, code.censoring, subset, na.action)
-  if (nlevels(as.factor(data$d)) == 2) outcome.type <- "SURVIVAL"
   error <- check_error(error, outcome.type)
 
   if (outcome.type == "SURVIVAL") {
