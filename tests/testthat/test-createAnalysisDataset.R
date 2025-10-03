@@ -1,4 +1,4 @@
-test_that("createAnalysisDataset produced expected variables with missing data", {
+test_that("createAnalysisDataset() produced expected variables with missing data", {
   data(diabetes.complications)
   nuisance.model <- t~fruitq1
 
@@ -13,7 +13,7 @@ test_that("createAnalysisDataset produced expected variables with missing data",
   expect_equal(tested, expected)
 })
 
-test_that("createAnalysisDataset produced expected a subset dataset", {
+test_that("createAnalysisDataset() produced expected a subset dataset", {
   data(diabetes.complications)
   nuisance.model <- t~fruitq1
 
@@ -26,7 +26,7 @@ test_that("createAnalysisDataset produced expected a subset dataset", {
   expect_equal(tested, expected)
 })
 
-test_that("createAnalysisDataset produced expected a subset dataset of men", {
+test_that("createAnalysisDataset() produced expected a subset dataset of men", {
   data(diabetes.complications)
   nuisance.model <- t~fruitq1
 

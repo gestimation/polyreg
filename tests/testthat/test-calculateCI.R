@@ -1,10 +1,10 @@
-test_that("km.curve yields the same outputs as survfit with log-log transformation", {
+test_that("survival.curve() yields the same outputs as survfit() with log-log transformation", {
   library(survival)
   library(ggsurvfit)
   library(Rcpp)
   df_test <- createTestData(200, 2, first_zero=TRUE, last_zero=TRUE, subset_present=FALSE, logical_strata=FALSE, na_strata=FALSE)
   e <- survfit(Surv(t, d)~strata, df_test, weight=w, conf.type = "log-log")
-  t <- km.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "log-log", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
+  t <- survival.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "log-log", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
   e$std.err <- sapply(e$std.err, function(x) ifelse(is.nan(x), NA, x))
   e$lower <- sapply(e$lower, function(x) ifelse(is.nan(x), NA, x))
   e$upper <- sapply(e$upper, function(x) ifelse(is.nan(x), NA, x))
@@ -34,13 +34,13 @@ test_that("km.curve yields the same outputs as survfit with log-log transformati
   expect_equal(expected, tested)
 })
 
-test_that("km.curve yields the same outputs as survfit with log transformation", {
+test_that("survival.curve() yields the same outputs as survfit() with log transformation", {
   library(survival)
   library(ggsurvfit)
   library(Rcpp)
   df_test <- createTestData(200, 2, first_zero=TRUE, last_zero=TRUE, subset_present=FALSE, logical_strata=FALSE, na_strata=FALSE)
   e <- survfit(Surv(t, d)~strata, df_test, weight=w, conf.type = "log")
-  t <- km.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "log", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
+  t <- survival.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "log", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
   e$std.err <- sapply(e$std.err, function(x) ifelse(is.nan(x), NA, x))
   e$lower <- sapply(e$lower, function(x) ifelse(is.nan(x), NA, x))
   e$upper <- sapply(e$upper, function(x) ifelse(is.nan(x), NA, x))
@@ -70,13 +70,13 @@ test_that("km.curve yields the same outputs as survfit with log transformation",
   expect_equal(expected, tested)
 })
 
-test_that("km.curve yields the same outputs as survfit with arcsine transformation", {
+test_that("survival.curve() yields the same outputs as survfit() with arcsine transformation", {
   library(survival)
   library(ggsurvfit)
   library(Rcpp)
   df_test <- createTestData(200, 2, first_zero=TRUE, last_zero=TRUE, subset_present=FALSE, logical_strata=FALSE, na_strata=FALSE)
   e <- survfit(Surv(t, d)~strata, df_test, weight=w, conf.type = "a")
-  t <- km.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "a", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
+  t <- survival.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "a", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
   e$std.err <- sapply(e$std.err, function(x) ifelse(is.nan(x), NA, x))
   e$lower <- sapply(e$lower, function(x) ifelse(is.nan(x), NA, x))
   e$upper <- sapply(e$upper, function(x) ifelse(is.nan(x), NA, x))
@@ -106,13 +106,13 @@ test_that("km.curve yields the same outputs as survfit with arcsine transformati
   expect_equal(expected, tested)
 })
 
-test_that("km.curve yields the same outputs as survfit", {
+test_that("survival.curve() yields the same outputs as survfit()", {
   library(survival)
   library(ggsurvfit)
   library(Rcpp)
   df_test <- createTestData(200, 2, first_zero=TRUE, last_zero=TRUE, subset_present=FALSE, logical_strata=FALSE, na_strata=FALSE)
   e <- survfit(Surv(t, d)~strata, df_test, weight=w, conf.type = "plain")
-  t <- km.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "plain", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
+  t <- survival.curve(Surv(t, d)~strata, df_test, weight="w", conf.type = "plain", report.ggsurvfit = FALSE, report.survfit.std.err = TRUE)
   e$std.err <- sapply(e$std.err, function(x) ifelse(is.nan(x), NA, x))
   e$lower <- sapply(e$lower, function(x) ifelse(is.nan(x), NA, x))
   e$upper <- sapply(e$upper, function(x) ifelse(is.nan(x), NA, x))
@@ -142,7 +142,36 @@ test_that("km.curve yields the same outputs as survfit", {
   expect_equal(expected, tested)
 })
 
-test_that("empinf in boot package yields expected pseudo observations", {
+
+test_that("Jack Knife standard error of survival.curve() yields the same outputs as separate analysis when strata is present", {
+  library(ggsurvfit)
+  library(Rcpp)
+  testdata <- createTestData(20, 1, first_zero=TRUE, last_zero=FALSE, subset_present=FALSE, logical_strata=TRUE, na_strata=FALSE)
+  testdata1 <- subset(testdata, strata==FALSE)
+  testdata2 <- subset(testdata, strata==TRUE)
+  t <- survival.curve(Surv(t, d)~strata, testdata, weight="w", error = "jackknife", report.ggsurvfit = FALSE)
+  e1 <- survival.curve(Surv(t, d)~1, testdata1, weight="w", error = "jackknife", report.ggsurvfit = FALSE)
+  e2 <- survival.curve(Surv(t, d)~1, testdata2, weight="w", error = "jackknife", report.ggsurvfit = FALSE)
+  expected <- c(e1$std.err, e2$std.err)
+  tested <- t$std.err
+  expect_equal(expected, tested)
+})
+
+
+test_that("Greenwood standard error of survival.curve() yields the same outputs as separate analysis when strata is present", {
+  library(ggsurvfit)
+  library(Rcpp)
+  testdata <- createTestData(20, 1, first_zero=TRUE, last_zero=FALSE, subset_present=FALSE, logical_strata=TRUE, na_strata=FALSE)
+  testdata1 <- subset(testdata, strata==FALSE)
+  testdata2 <- subset(testdata, strata==TRUE)
+  t <- survival.curve(Surv(t, d)~strata, testdata, weight="w", error = "greenwood", report.ggsurvfit = FALSE)
+  e1 <- survival.curve(Surv(t, d)~1, testdata1, weight="w", error = "greenwood", report.ggsurvfit = FALSE)
+  e2 <- survival.curve(Surv(t, d)~1, testdata2, weight="w", error = "greenwood", report.ggsurvfit = FALSE)
+  expected <- c(e1$std.err, e2$std.err)
+  tested <- t$std.err
+  expect_equal(expected, tested)
+})
+test_that("empinf() in boot package yields expected pseudo observations", {
   library(boot)
   fn1 <- function(data) {
     out_km <- calculateKM_rcpp(data$t, data$d, data$w, as.integer(data$strata), "none")
